@@ -1,0 +1,28 @@
+{
+  "name": "exampro-scheduler",
+  "version": "1.0.0",
+  "description": "Exam scheduling system, A MERN stack application with MySQL as the database.",
+  "main": "server/app.js",
+  "scripts": {
+    "start": "node server/app.js",
+    "client": "npm start --prefix client",
+    "server": "nodemon server/app.js",
+    "dev": "concurrently \"npm run server\" \"npm run client\""
+  },
+  "dependencies": {
+    "concurrently": "^6.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Zookegger/ExamPro-Scheduler.git"
+  },
+  "author": "Nguyen Duc Trung, Nguyen Huu Thinh",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Zookegger/ExamPro-Scheduler/issues"
+  },
+  "homepage": "https://github.com/Zookegger/ExamPro-Scheduler"
+}
