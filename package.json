@@ -4,16 +4,19 @@
   "description": "Exam scheduling system, A MERN stack application with MySQL as the database.",
   "main": "server/app.js",
   "scripts": {
-    "start": "node server/app.js",
+    "start": "concurrently \"npm run server\" \"npm run client\"",
     "client": "npm start --prefix client",
     "server": "nodemon server/app.js",
-    "dev": "concurrently \"npm run server\" \"npm run client\""
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "install_client": "cd client && npm install",    
+    "install_server": "npm install",
+    "setup": "npm run install_server && npm run install_client"
   },
   "dependencies": {
-    "concurrently": "^6.0.0"
+    "concurrently": "^9.1.0"
   },
   "devDependencies": {
-    "nodemon": "^3.0.1"
+    "nodemon": "^3.1.10"
   },
   "repository": {
     "type": "git",
