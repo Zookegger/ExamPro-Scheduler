@@ -140,3 +140,6 @@ vite.config.ts.timestamp-*
 
 # App Description
 ProjectDescription.txt
+
+# Github Instruction
+copilot-instructions.md
