@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  # MySQL Database Service
+  mysql_db:
+    image: mysql:8.0
+    container_name: examprо_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./server/database/init.sql:/docker-entrypoint-initdb.d/init.sql # Optional: initial data
+    restart: unless-stopped
+    networks:
+      - examprо_network
+
+  # ExamPro Scheduler Application
+  examprо_app:
+    build: .
+    container_name: examprо_scheduler
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=production
+      - DB_HOST=mysql_db  # Use service name as hostname
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_PORT=3306
+    depends_on:
+      - mysql_db
+    restart: unless-stopped
+    networks:
+      - examprо_network
+
+volumes:
+  mysql_data:
+
+networks:
+  examprо_network:
+    driver: bridge
