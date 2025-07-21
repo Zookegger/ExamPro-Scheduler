@@ -141,5 +141,8 @@ vite.config.ts.timestamp-*
 # App Description
 ProjectDescription.txt
 
+# Examples
+example_App.js
+
 # Github Instruction
 copilot-instructions.md

@@ -1,6 +1,6 @@
 {
   "name": "exam-scheduler-server",
-  "version": "1.0.0",  
+  "version": "1.0.0",
   "description": "Exam scheduling system backend",
   "main": "app.js",
   "scripts": {

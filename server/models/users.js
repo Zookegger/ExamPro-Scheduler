@@ -72,6 +72,10 @@ const User = sequelize.define('User', {
 
 // Add a method to check if a password is correct
 // This lets us verify a user's password during login
+/**
+ * Check password
+ *  @param {string} password - User input password
+*/
 User.prototype.checkPassword = async function(password) {
     // bcrypt.compare safely checks if the provided password matches the stored hash
     return await bcrypt.compare(password, this.password_hash);
