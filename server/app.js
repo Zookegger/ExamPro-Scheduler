@@ -24,6 +24,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const helmet = require('helmet');
+const path = require('path');
 const morgan = require('morgan');
 const { testConnection, syncDatabase } = require('./models');
 require('dotenv').config();
@@ -181,6 +182,16 @@ app.use(morgan("combined"));
 // Request body parsing middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Serve static files from the React build
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Handle React routing - serve index.html for non-API routes
+app.get('*', (req, res) => {
+    if (!req.path.startsWith('/api')) {
+        res.sendFile(path.join(__dirname, 'public', 'index.html'))
+    }
+});
 
 /**
  * Root Endpoint

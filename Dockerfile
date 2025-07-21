@@ -24,7 +24,7 @@ RUN mkdir -p server/public
 RUN cp -r client/build/* server/public/
 
 # Only expose port 5000 (monolithic approach)
-EXPOSE 5000
+EXPOSE 3000 5000
 
 # Start the server (which serves both API and React app)
 # CMD ["npm", "run", "start"]
