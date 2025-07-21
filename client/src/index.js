@@ -6,6 +6,12 @@ import reportWebVitals from './reportWebVitals';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
+  // <React.StrictMode></React.StrictMode> 
+  // This causes 2 connections because React 18 in development mode intentionally runs effects twice to help you catch bugs:
+  // Component mounts → useEffect runs (creates WebSocket #1)
+  // React Strict Mode triggers → useEffect cleanup runs → useEffect runs again (creates WebSocket #2)
+  // Result: Two connections from one tab!
+
   <React.StrictMode>
     <App />
   </React.StrictMode>
