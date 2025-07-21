@@ -1,46 +1,71 @@
-version: '3.8'
-
 services:
   # MySQL Database Service
   mysql_db:
     image: mysql:8.0
-    container_name: examprо_mysql
+    container_name: exampro_mysql
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
       MYSQL_DATABASE: ${DB_NAME}
-      MYSQL_USER: ${DB_USER}
-      MYSQL_PASSWORD: ${DB_PASSWORD}
+      # MYSQL_USER: ${DB_USER}
+      # MYSQL_PASSWORD: ${DB_PASSWORD}
     ports:
       - "3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./server/database/init.sql:/docker-entrypoint-initdb.d/init.sql # Optional: initial data
+      - ./server/database/init.sql:/docker-entrypoint-initdb.d/init.sql
     restart: unless-stopped
     networks:
-      - examprо_network
+      - exampro_network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
-  # ExamPro Scheduler Application
-  examprо_app:
-    build: .
-    container_name: examprо_scheduler
+  # Express API Server
+  exampro_server:
+    build: 
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: exampro_api
     ports:
       - "5000:5000"
     environment:
       - NODE_ENV=production
-      - DB_HOST=mysql_db  # Use service name as hostname
+      - DB_HOST=mysql_db
       - DB_NAME=${DB_NAME}
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_PORT=3306
     depends_on:
-      - mysql_db
+      mysql_db:
+        condition: service_healthy
     restart: unless-stopped
     networks:
-      - examprо_network
+      - exampro_network
+    volumes:
+      - ./server/logs:/app/logs # For log persistence
+
+  # React Frontend App
+  exampro_client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: exampro_frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:5000
+      - REACT_APP_WS_URL=http://localhost:5000
+    depends_on:
+      - exampro_server
+    restart: unless-stopped
+    networks:
+      - exampro_network
 
 volumes:
   mysql_data:
 
 networks:
-  examprо_network:
+  exampro_network:
     driver: bridge

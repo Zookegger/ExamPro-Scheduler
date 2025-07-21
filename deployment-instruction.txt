@@ -1,0 +1,15 @@
+First time run
+
+# Build and start all services
+docker-compose up -d --build
+
+# Check service status
+docker-compose ps
+
+# View logs for specific services
+docker-compose logs examprо_client
+docker-compose logs examprо_server
+docker-compose logs mysql_db
+
+# Stop all services
+docker-compose down
