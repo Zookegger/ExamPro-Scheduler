@@ -21,7 +21,7 @@ RUN cd client && npm run build
 
 # Copy built React files to server's static directory
 RUN mkdir -p server/public
-RUN cp -r client/build.* server/public/
+RUN cp -r client/build/* server/public/
 
 # Only expose port 5000 (monolithic approach)
 EXPOSE 5000
