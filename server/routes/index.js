@@ -31,35 +31,6 @@ const room_routes = require('./room_routes');
 const subject_routes = require('./subject_routes');
 
 /**
- * Health Check Endpoint
- * 
- * Provides system status information for monitoring and debugging.
- * This endpoint can be used to verify that the API server is running.
- * 
- * @route GET /api/health
- * @access Public
- * @returns {Object} JSON object with server status and timestamp
- * 
- * @example
- * // GET /api/health
- * // Response:
- * {
- *   "status": "OK",
- *   "message": "Hệ thống đang hoạt động bình thường", 
- *   "timestamp": "2025-07-21T10:30:00.000Z",
- *   "version": "1.0.0"
- * }
- */
-router.get('/health', (req, res) => {
-    res.json({
-        status: 'OK',
-        message: 'Hệ thống đang hoạt động bình thường',
-        timestamp: new Date().toISOString(),
-        version: process.env.API_VERSION || '1.0.0'
-    });
-});
-
-/**
  * Mount Route Modules
  * 
  * Each route group is mounted with its base path. This creates a
