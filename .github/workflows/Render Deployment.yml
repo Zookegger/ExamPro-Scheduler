@@ -1,0 +1,40 @@
+name: Deploy to Render
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Fetch all history for all branches and tags
+
+      - name: Install dockerimage
+        run: docker build .
+      
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Tests
+        if: ${{ hashFiles('**/test/**', '**/*.test.js') != '' }}
+        run: |
+          if npm run | grep -q "test"; then
+            npm test -- --passWithNoTests
+          else
+            echo "No test script found in package.json. Skipping tests."
+          fi
+
+      - name: Trigger Render Deploy
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        run: |
+          curl -X POST \
+          -H "Content-Type: application/json" \
+          -d '{"branch": "${{ github.ref_name }}", "sha": "${{ github.sha }}"}' \
+          $RENDER_DEPLOY_HOOK
