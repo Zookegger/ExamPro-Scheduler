@@ -553,7 +553,8 @@ function ServerHealthCheck({ current_user_role }) {
         console.log(`🔌 Initializing health check for role: ${current_user_role}`);
         
         // Initialize WebSocket connection to server
-        const socket = io(`http://localhost:5000`);
+		const socket_url = process.env.REACT_APP_WS_URL || 'http://localhost:5000';
+        const socket = io(socket_url);
         let ping_interval = null;
 
         // ========== CONNECTION HANDLERS ==========

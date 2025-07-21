@@ -183,16 +183,6 @@ app.use(morgan("combined"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve static files from the React build
-app.use(express.static(path.join(__dirname, 'public')));
-
-// Handle React routing - serve index.html for non-API routes
-app.get('*', (req, res) => {
-    if (!req.path.startsWith('/api')) {
-        res.sendFile(path.join(__dirname, 'public', 'index.html'))
-    }
-});
-
 /**
  * Root Endpoint
  * 
@@ -282,7 +272,7 @@ app.get('/api/debug/connections', (req, res) => {
     res.json({
         total_connections: connections.length,
         connections: connections,
-        server_uptime: process.uptime()
+        server_uptime: Math.floor(process.uptime())
     });
 })
 
