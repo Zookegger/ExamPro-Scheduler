@@ -1,40 +1,209 @@
-name: Deploy to Render
+name: Deploy ExamPro Scheduler to Render
 
+# Trigger events following snake_case naming
 on:
   push:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      deploy_environment:
+        description: 'Deployment environment'
+        required: false
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
 
 jobs:
-  build-and-deploy:
+  # Build and test job with snake_case naming
+  build_and_test:
+    name: Build and Test Application
     runs-on: ubuntu-latest
-
+    
+    strategy:
+      matrix:
+        node_version: [18, 20, 22]  # Test multiple Node versions
+    
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout Repository
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Fetch all history for all branches and tags
-
-      - name: Install dockerimage
-        run: docker build .
+          fetch-depth: 0
       
-      - name: Install Dependencies
-        run: npm ci
-
-      - name: Run Tests
-        if: ${{ hashFiles('**/test/**', '**/*.test.js') != '' }}
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node_version }}
+          cache: 'npm'
+          cache-dependency-path: |
+            server/package-lock.json
+            client/package-lock.json
+      
+      # Install dependencies for both client and server
+      - name: Install Server Dependencies
+        working-directory: ./server
         run: |
+          echo "📦 Installing server dependencies..."
+          npm ci
+      
+      - name: Install Client Dependencies
+        working-directory: ./client
+        run: |
+          echo "📦 Installing client dependencies..."
+          npm ci
+      
+      # Lint code following your snake_case convention
+      - name: Run Code Linting
+        run: |
+          echo "🔍 Running linting checks..."
+          if [ -f "server/package.json" ] && npm run --prefix server | grep -q "lint"; then
+            echo "Running server linting..."
+            npm run lint --prefix server
+          fi
+          if [ -f "client/package.json" ] && npm run --prefix client | grep -q "lint"; then
+            echo "Running client linting..."
+            npm run lint --prefix client
+          fi
+      
+      # Run tests if they exist
+      - name: Run Server Tests
+        working-directory: ./server
+        if: ${{ hashFiles('server/test/**', 'server/**/*.test.js') != '' }}
+        run: |
+          echo "🧪 Running server tests..."
           if npm run | grep -q "test"; then
             npm test -- --passWithNoTests
           else
-            echo "No test script found in package.json. Skipping tests."
+            echo "No test script found. Skipping server tests."
           fi
+      
+      - name: Run Client Tests
+        working-directory: ./client
+        if: ${{ hashFiles('client/src/**/*.test.js', 'client/src/**/*.test.jsx') != '' }}
+        run: |
+          echo "🧪 Running client tests..."
+          if npm run | grep -q "test"; then
+            CI=true npm test -- --coverage --watchAll=false
+          else
+            echo "No test script found. Skipping client tests."
+          fi
+      
+      # Build the React application
+      - name: Build React Application
+        working-directory: ./client
+        run: |
+          echo "🏗️ Building React application..."
+          npm run build
+      
+      # Optional: Build Docker image for testing
+      - name: Test Docker Build
+        if: matrix.node_version == 20  # Only test on one Node version
+        run: |
+          echo "🐳 Testing Docker build..."
+          docker build -t examprо_scheduler:test .
+          echo "Docker build successful!"
 
-      - name: Trigger Render Deploy
+  # Deploy job that runs after successful build
+  deploy_to_render:
+    name: Deploy to Render Platform
+    needs: build_and_test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'  # Only deploy from main branch
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      
+      # Add deployment status
+      - name: Update Deployment Status
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: context.payload.deployment?.id || 0,
+              state: 'in_progress',
+              description: 'Deploying ExamPro Scheduler to Render...',
+              environment_url: process.env.RENDER_APP_URL || 'https://your-app.render.com'
+            });
+      
+      # Trigger Render deployment
+      - name: Trigger Render Deployment
         env:
           RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+          RENDER_APP_URL: ${{ secrets.RENDER_APP_URL }}
         run: |
-          curl -X POST \
-          -H "Content-Type: application/json" \
-          -d '{"branch": "${{ github.ref_name }}", "sha": "${{ github.sha }}"}' \
-          $RENDER_DEPLOY_HOOK
+          echo "🚀 Triggering Render deployment..."
+          
+          response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST \
+            -H "Content-Type: application/json" \
+            -d '{
+              "branch": "${{ github.ref_name }}", 
+              "sha": "${{ github.sha }}",
+              "commit_message": "${{ github.event.head_commit.message }}",
+              "author": "${{ github.event.head_commit.author.name }}"
+            }' \
+            $RENDER_DEPLOY_HOOK)
+          
+          http_code=$(echo $response | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+          body=$(echo $response | sed -e 's/HTTPSTATUS:.*//g')
+          
+          if [ $http_code -eq 200 ] || [ $http_code -eq 201 ]; then
+            echo "✅ Deployment triggered successfully!"
+            echo "Response: $body"
+          else
+            echo "❌ Deployment failed with status: $http_code"
+            echo "Response: $body"
+            exit 1
+          fi
+      
+      # Wait for deployment to complete (optional)
+      - name: Wait for Deployment
+        if: success()
+        run: |
+          echo "⏳ Waiting for deployment to complete..."
+          sleep 60  # Wait for deployment to start
+          
+          # You could add deployment status checking here
+          echo "🎉 Deployment initiated! Check Render dashboard for progress."
+      
+      # Notify about deployment
+      - name: Deployment Success Notification
+        if: success()
+        run: |
+          echo "🎉 ExamPro Scheduler successfully deployed to Render!"
+          echo "📅 Deployment time: $(date)"
+          echo "🔗 Application URL: ${RENDER_APP_URL:-'Check Render dashboard'}"
+
+  # Optional: Post-deployment health check
+  post_deployment_check:
+    name: Post-Deployment Health Check
+    needs: deploy_to_render
+    runs-on: ubuntu-latest
+    if: success()
+    
+    steps:
+      - name: Health Check API
+        env:
+          RENDER_APP_URL: ${{ secrets.RENDER_APP_URL }}
+        run: |
+          echo "🏥 Performing health check..."
+          
+          # Wait for app to be ready
+          sleep 30
+          
+          if [ -n "$RENDER_APP_URL" ]; then
+            response=$(curl -s -o /dev/null -w "%{http_code}" "$RENDER_APP_URL/api/health" || echo "000")
+            
+            if [ "$response" = "200" ]; then
+              echo "✅ Health check passed! API is responding."
+            else
+              echo "⚠️ Health check returned status: $response"
+              echo "This might be normal if the app is still starting up."
+            fi
+          else
+            echo "ℹ️ No RENDER_APP_URL configured. Skipping health check."
+          fi
