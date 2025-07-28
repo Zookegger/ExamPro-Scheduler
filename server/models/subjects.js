@@ -1,6 +1,6 @@
 // Import necessary libraries
 const { DataTypes } = require('sequelize');
-const sequelize = require('../config/database');
+const { sequelize } = require('../config/database');
 
 /**
  * Subject Model
@@ -63,7 +63,10 @@ const Subject = sequelize.define('Subject', {
     tableName: 'subjects',
     timestamps: true,
     createdAt: 'created_at',
-    updatedAt: 'updated_at'
+    updatedAt: 'updated_at',
+    engine: 'InnoDB',
+    charset: 'utf8mb4',
+    collate: 'utf8mb4_unicode_ci'
 });
 
 module.exports = Subject;

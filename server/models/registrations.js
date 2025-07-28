@@ -1,6 +1,6 @@
 // Import necessary libraries
 const { DataTypes } = require('sequelize');
-const sequelize = require('../config/database');
+const { sequelize } = require('../config/database');
 
 /**
  * Registration Model
@@ -45,12 +45,6 @@ const Registration = sequelize.define('Registration', {
         defaultValue: 'pending',
         comment: 'Status of the registration'
     },
-    registered_at: {
-        type: DataTypes.DATE,
-        allowNull: false,
-        defaultValue: DataTypes.NOW,
-        comment: 'When the student registered'
-    },
     notes: {
         type: DataTypes.TEXT,
         allowNull: true,
@@ -65,8 +59,11 @@ const Registration = sequelize.define('Registration', {
 }, {
     tableName: 'registrations',
     timestamps: true,
-    createdAt: 'created_at',
-    updatedAt: 'updated_at'
+    createdAt: 'created_at',  // This serves as registration timestamp
+    updatedAt: 'updated_at',
+    engine: 'InnoDB',
+    charset: 'utf8mb4',
+    collate: 'utf8mb4_unicode_ci'
 });
 
 module.exports = Registration;

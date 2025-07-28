@@ -1,6 +1,6 @@
 // Import necessary libraries
 const { DataTypes } = require('sequelize');
-const sequelize = require('../config/database');
+const { sequelize } = require('../config/database');
 
 /**
  * Room Model
@@ -73,6 +73,9 @@ const Room = sequelize.define('Room', {
     timestamps: true,
     createdAt: 'created_at',
     updatedAt: 'updated_at',
+    engine: 'InnoDB',
+    charset: 'utf8mb4',
+    collate: 'utf8mb4_unicode_ci'
 });
 
 module.exports = Room;

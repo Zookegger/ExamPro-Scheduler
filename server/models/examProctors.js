@@ -1,5 +1,5 @@
 const { DataTypes } = require('sequelize');
-const sequelize = require('../config/database');
+const { sequelize } = require('../config/database');
 
 /**
  * ExamProctor Model
@@ -54,6 +54,9 @@ const ExamProctor = sequelize.define('ExamProctor', {
     timestamps: true,
     createdAt: 'created_at',
     updatedAt: 'updated_at',
+    engine: 'InnoDB',
+    charset: 'utf8mb4',
+    collate: 'utf8mb4_unicode_ci',
     indexes: [{
         unique: true,
         fields: ['exam_id', 'proctor_id'],

@@ -1,6 +1,6 @@
 // Import necessary libraries
 const { DataTypes } = require('sequelize'); // Sequelize provides types for our database columns
-const sequelize = require('../config/database'); // Our database connection
+const { sequelize } = require('../config/database'); // Our database connection
 const bcrypt = require('bcryptjs'); // Library for password hashing (security)
 const BCRYPT_SALT_LENGTH = 12; // How strong the password encryption will be
 
@@ -61,6 +61,12 @@ const User = sequelize.define('User', {
     }
 }, {
     tableName: 'users', // The actual name of the table in the database
+    timestamps: true,
+    createdAt: 'created_at',
+    updatedAt: 'updated_at',
+    engine: 'InnoDB',
+    charset: 'utf8mb4',
+    collate: 'utf8mb4_unicode_ci',
     hooks: {
         // This runs automatically before a new user is saved
         beforeCreate: async (user) => {
