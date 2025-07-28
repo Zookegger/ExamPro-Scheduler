@@ -12,7 +12,7 @@ const get_api_base_url = () => {
         return process.env.REACT_APP_API_URL;
     }
 
-    return "http://localhost:5000/api";
+    return "http://localhost:5000";
 }
 
 const API_BASE_URL = get_api_base_url();
@@ -50,9 +50,9 @@ const api_call = async (endpoints, options = {}) => {
  * Health check API call
  * Tests connection to the Express backend service
  */
-export const check_server_health = () => api_call(`/health`);
-export const get_all_users = () => api_call(`/users`);
-export const create_user = (user_data) => api_call('/users', {
+export const check_server_health = () => api_call(`/api/health`);
+export const get_all_users = () => api_call(`/api/users`);
+export const create_user = (user_data) => api_call('/api/users', {
     method: 'POST',
     body: JSON.stringify(user_data),
 });
