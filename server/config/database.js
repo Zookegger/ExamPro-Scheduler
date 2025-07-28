@@ -22,7 +22,7 @@ const sequelize = new Sequelize(
         // Configuration options
         host: process.env.DB_HOST,   // Where the database is located (like an address)
         port: process.env.DB_PORT,   // Which port to connect on (like a specific entrance)
-        dialect: `mysql`,          // The type of database we're using
+        dialect: 'mysql',          // The type of database we're using
         
         // Only show SQL commands in the console during development
         logging: process.env.NODE_ENV === 'development' ? console.log : false,
@@ -40,10 +40,36 @@ const sequelize = new Sequelize(
             underscored: true,          // Use snake_case for column names (e.g., user_name instead of userName)
             timestamps: true,           // Automatically add created_at and updated_at fields
             created_at: 'created_at',   // Custom name for the creation timestamp
-            updated_at: 'updated_at'    // Custom name for the update timestamp
+            updated_at: 'updated_at',    // Custom name for the update timestamp
+            engine: 'InnoDB',
+            charset: 'utf8mb4',
+            collate: 'utf8mb4_unicode_ci'
         }
     }
 )
 
+/**
+ * Creates a temporary Sequelize connection without specifying a database
+ * Useful for creating databases before connecting to them
+ * 
+ * @returns {Sequelize} Temporary connection instance
+ */
+function create_temp_connection() {
+    return new Sequelize(
+        null,
+        process.env.DB_USER,
+        process.env.DB_PASSWORD,
+        {
+            host: process.env.DB_HOST,
+            port: process.env.DB_PORT,
+            dialect: 'mysql',
+            logging: false,
+        }
+    );
+}
+
 // Make this connection available to other files in our project
-module.exports = sequelize;
+module.exports = {
+    sequelize,
+    create_temp_connection,
+};

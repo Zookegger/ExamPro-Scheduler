@@ -26,7 +26,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const path = require('path');
 const morgan = require('morgan');
-const { testConnection, syncDatabase } = require('./models');
+const { testConnection, syncDatabase, create_database_if_not_exists } = require('./models');
 require('dotenv').config();
 
 const app = express();
@@ -137,13 +137,46 @@ io_stream.on('connection', (socket) => {
     socket.on('disconnect', (reason) => {
         const conn = active_connections.get(socket.id);
         if (conn) {
-            console.log(`[DISCONNECTED] ${socket.id} after ${conn.ping_count} pings - Reason: ${reason}`);
+            const duration_minutes = Math.round((new Date() - conn.connected_at) / 60000);
+            console.log(`[DISCONNECTED] ${socket.id} after ${conn.ping_count} pings (${duration_minutes}min) - Reason: ${reason}`);
         }
 
         active_connections.delete(socket.id);
         console.log(`📊 Remaining connections: ${active_connections.size}`);
     });
+
+    /**
+     * Handle connection errors
+     */
+    socket.on('error', (error) => {
+        console.error(`[SOCKET ERROR] ${socket.id}: ${error}`);
+        active_connections.delete(socket.id);
+    });
 })
+
+/**
+ * Periodic cleanup of stale connections
+ * Removes connections that are no longer valid
+ */
+setInterval(() => {
+    const stale_connections = [];
+    
+    for (const [socket_id, conn_info] of active_connections.entries()) {
+        // Check if socket still exists in io_stream
+        const socket = io_stream.sockets.sockets.get(socket_id);
+        if (!socket || !socket.connected) {
+            stale_connections.push(socket_id);
+        }
+    }
+    
+    if (stale_connections.length > 0) {
+        console.log(`🧹 Cleaning up ${stale_connections.length} stale connections`);
+        stale_connections.forEach(socket_id => {
+            active_connections.delete(socket_id);
+        });
+        console.log(`📊 Active connections after cleanup: ${active_connections.size}`);
+    }
+}, 30000); // Run cleanup every 30 seconds
 
 /**
  * Database Initialization
@@ -157,6 +190,7 @@ io_stream.on('connection', (socket) => {
  * @throws {Error} If database connection or sync fails
  */
 async function initDatabase() {
+    await create_database_if_not_exists();
     await testConnection();
     await syncDatabase();
 }
@@ -275,6 +309,48 @@ app.get('/api/debug/connections', (req, res) => {
         server_uptime: Math.floor(process.uptime())
     });
 })
+
+/**
+ * Test Timestamp Endpoint
+ * 
+ * Development endpoint for testing database timestamp functionality.
+ * Creates a test subject record and returns it to verify that
+ * Sequelize automatic timestamps are working correctly.
+ * 
+ * @route POST /api/test/timestamp
+ * @access Public (development only)
+ * @returns {Object} JSON with created test subject including timestamps
+ */
+app.post('/api/test/timestamp', async (req, res) => {
+    try {
+        const { Subject } = require('./models');
+        
+        // Create a test subject
+        const testSubject = await Subject.create({
+            subject_code: `TEST_${Date.now()}`,
+            subject_name: 'Test Subject for Timestamp',
+            department: 'Test Department',
+            description: 'This is a test subject to verify timestamp functionality'
+        });
+
+        res.json({
+            success: true,
+            message: 'Test subject created successfully',
+            data: testSubject,
+            timestamp_info: {
+                created_at: testSubject.created_at,
+                updated_at: testSubject.updated_at,
+                are_timestamps_valid: !!(testSubject.created_at && testSubject.updated_at)
+            }
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Error testing timestamp functionality',
+            error: error.message
+        });
+    }
+});
 
 /**
  * Start Server

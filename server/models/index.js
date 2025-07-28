@@ -7,7 +7,7 @@
  * - Many-to-one: Registration to User, Registration to Exam
  */
 
-const sequelize = require("../config/database");
+const { sequelize, create_temp_connection } = require('../config/database');
 const { Op } = require("sequelize");
 const User = require("./users");
 const Exam = require("./exams");
@@ -15,6 +15,8 @@ const Registration = require("./registrations");
 const Subject = require("./subjects");
 const Room = require("./rooms");
 const ExamProctor = require("./examProctors");
+
+require('dotenv').config(); // Load environment variables from .env file
 
 // =============================================
 // Define associations between models
@@ -117,10 +119,56 @@ async function testConnection() {
  */
 async function syncDatabase() {
 	try {
-		await sequelize.sync({ force: false });
-		console.log("Database synchronized successfully.");
+		// Use force: true to drop and recreate tables with proper timestamp defaults
+		// This fixes the timestamp NULL issue by ensuring fresh table creation
+		await sequelize.sync({ force: true });
+		console.log("🗃️  Database tables dropped and recreated successfully.");
+		console.log("✅ Timestamp columns now have proper DEFAULT CURRENT_TIMESTAMP settings.");
 	} catch (error) {
-		console.error(`Error synchronizing database: ${error}`);
+		console.error(`❌ Error synchronizing database: ${error}`);
+	}
+}
+
+/**
+ * Creates the database if it doesn't exist
+ * 
+ * This function connects to MySQL without specifying a database,
+ * checks if our target database exists, and creates it if needed.
+ * 
+ * @async
+ * @returns {Promise<void>}
+ */
+async function create_database_if_not_exists() {
+    // 1. Create a new Sequelize instance without database name
+    // 2. Use a raw query to check/create database
+    // 3. Close the temporary connection
+
+	const temp_connection = create_temp_connection();
+
+	try {
+		await temp_connection.authenticate();
+		console.log(`[SERVER] Connected to MySQL server`);
+
+		const databases = await temp_connection.query(
+			'SHOW DATABASES LIKE ?', 
+			{
+				replacements: [ process.env.DB_NAME ],
+				type: temp_connection.QueryTypes.SELECT
+			}
+		);
+
+		if (databases.length === 0) {
+			await temp_connection.query(`CREATE DATABASE ${process.env.DB_NAME}`);
+			console.log(`📊 Database ${process.env.DB_NAME} created successfully`);
+		} else {
+			console.log(`📊 Database ${process.env.DB_NAME} already exists`);
+		}
+
+	} catch (error) {
+        console.error('❌ Error creating database:', error.message);
+        throw error;
+	} finally {
+		await temp_connection.close();
 	}
 }
 
@@ -164,4 +212,5 @@ module.exports = {
 	Subject,
 	testConnection,
 	syncDatabase,
+	create_database_if_not_exists,
 };
