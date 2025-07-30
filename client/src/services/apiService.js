@@ -70,3 +70,8 @@ export const get_all_exams = (filters = {}) => {
 export const get_socket_url = () => {
     return process.env.REACT_APP_WS_URL || 'http://localhost:5000';
 };
+
+export const login = (user_data) => api_call('/api/users/login', {
+    method: 'POST',
+    body: JSON.stringify(user_data),
+});

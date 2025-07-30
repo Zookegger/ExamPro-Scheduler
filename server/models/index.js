@@ -172,6 +172,22 @@ async function create_database_if_not_exists() {
 	}
 }
 
+async function create_default_admin_user() {
+	const admin_exists = await User.findOne({ where: { user_role: 'admin' }});
+
+	if (!admin_exists) {
+		await User.create({
+			user_name: 'admin',
+			email: 'admin@exampro.local',
+			password_hash: 'admin123',
+			full_name: 'Default Admin',
+			user_role: 'admin',
+			is_active: true
+		});
+		console.log('✅ Default admin account created');
+	}
+}
+
 // =============================================
 // Add scopes for common queries
 // =============================================
@@ -203,14 +219,21 @@ Exam.addScope('upcoming', {
 // =============================================
 
 module.exports = {
-	sequelize,
-	User,
-	Exam,
-	ExamProctor,
-	Registration,
-	Room,
-	Subject,
-	testConnection,
-	syncDatabase,
-	create_database_if_not_exists,
+	models: {
+		User,
+		Exam,
+		ExamProctor,
+		Registration,
+		Room,
+		Subject,
+	},
+	utility: {
+		sequelize
+	},
+	methods: {
+		testConnection,
+		syncDatabase,
+		create_database_if_not_exists,
+		create_default_admin_user
+	}
 };

@@ -34,6 +34,11 @@ const User = sequelize.define('User', {
         primaryKey: true, // This marks the column as the main identifier
         autoIncrement: true // This makes the ID increase automatically for each new user
     },
+    user_name: {
+        type: DataTypes.STRING(75),
+        allowNull: false,
+        unique: true,
+    },
     full_name: {
         type: DataTypes.STRING(50), // Text, limited to 50 characters
         allowNull: false // This field cannot be empty
@@ -70,8 +75,13 @@ const User = sequelize.define('User', {
     hooks: {
         // This runs automatically before a new user is saved
         beforeCreate: async (user) => {
-            // This converts the plain text password to a secure encrypted version
-            user.password_hash = await bcrypt.hash(user.password_hash, BCRYPT_SALT_LENGTH);
+            user.password_hash = await user.hashPassword(user.password_hash);
+        },
+        // This runs automatically before a user info is updated
+        beforeUpdate: async (user) => {
+            if (user.changed('password_hash')) {
+                user.password_hash = await user.hashPassword(user.password_hash);
+            }
         }
     }
 });
@@ -85,6 +95,16 @@ const User = sequelize.define('User', {
 User.prototype.checkPassword = async function(password) {
     // bcrypt.compare safely checks if the provided password matches the stored hash
     return await bcrypt.compare(password, this.password_hash);
+}
+
+/**
+ * Hash a password using bcryptjs
+ * @param {string} plain_password
+ * @returns {Promise<string>}
+ */
+User.prototype.hashPassword = async function(plain_password) {
+    // This converts the plain text password to a secure encrypted version
+    return await bcrypt.hash(plain_password, BCRYPT_SALT_LENGTH);
 }
 
 // Make the User model available to other files in our application
