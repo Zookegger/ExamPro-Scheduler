@@ -90,6 +90,7 @@ async function login(user_name, password, res) {
             audience: 'exampro-users',   // Optional: intended audience
         });
 
+        // HTTP-Only cookie approach for JWT storage
         res.cookie('jwt_token', jwt_token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production', // only send over HTTPS in production
@@ -116,6 +117,29 @@ async function login(user_name, password, res) {
 	}
 }
 
+async function authorize(user_id, res) {
+    try {
+        const user = await db.models.User.findByPk(user_id);
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'Không tìm thấy người dùng' });
+        }
+
+        return res.json({
+            success: true,
+            user: {
+                user_id: user.user_id,
+                user_name: user.user_name,
+                user_role: user.user_role,
+                email: user.email
+            }
+        });
+    } catch (error) {
+        throw error;
+    }
+}
+
 module.exports = {
     login,
+    authorize
 }

@@ -27,6 +27,7 @@ const API_BASE_URL = get_api_base_url();
 const api_call = async (endpoints, options = {}) => {
     try {
         const response = await fetch(`${API_BASE_URL}${endpoints}`, {
+            credentials: 'include',
             headers: {
                 "Content-Type": "application/json",
                 ...options.headers,
@@ -74,4 +75,17 @@ export const get_socket_url = () => {
 export const login = (user_data) => api_call('/api/users/login', {
     method: 'POST',
     body: JSON.stringify(user_data),
+    credentials: 'include',
 });
+
+export const checkAuth = async () => {
+    try {
+        const response = await api_call('/api/users/me', {
+            credentials: 'include'
+        });
+        return response.user;
+    } catch (error) {
+        console.error('Not authenticated: ', error);
+        return null;
+    }
+}
