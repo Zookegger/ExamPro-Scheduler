@@ -98,7 +98,7 @@ function App() {
 				{/* Main Content Area */}
 				<main className="container-fluid d-flex flex-column flex-grow-1 bg-body-secondary">
 					<Routes>
-						<Route path="/" element={<MainPage />} />
+						<Route path="/" element={<MainPage current_user_role={current_user_role}/>} />
 						{is_development && (
 							<Route
 								path="/development"

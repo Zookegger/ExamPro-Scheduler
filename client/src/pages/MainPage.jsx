@@ -381,8 +381,7 @@ function AdminDashboardStats() {
 }
 
 // Main Production Page Component
-function MainPage() {
-    const [current_user_role, set_current_user_role] = useState("admin");
+function MainPage({current_user_role}) {
 
     return (
         <div className="container-fluid mt-4">
@@ -390,18 +389,6 @@ function MainPage() {
                 <div className="col-12">
                     <div className="d-flex justify-content-between align-items-center mb-4">
                         <h1>📊 ExamPro Scheduler Dashboard</h1>
-                        <div>
-                            <label className="me-2">Vai trò:</label>
-                            <select 
-                                className="form-select d-inline-block w-auto"
-                                value={current_user_role}
-                                onChange={(e) => set_current_user_role(e.target.value)}
-                            >
-                                <option value="student">Học sinh</option>
-                                <option value="teacher">Giáo viên</option>
-                                <option value="admin">Quản trị viên</option>
-                            </select>
-                        </div>
                     </div>
                 </div>
             </div>

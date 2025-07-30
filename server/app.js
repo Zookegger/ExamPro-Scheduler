@@ -5,6 +5,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const path = require('path');
 const morgan = require('morgan');
+const cookie_parser = require('cookie-parser');
 const { methods } = require('./models');
 
 require('dotenv').config();
@@ -193,16 +194,17 @@ async function initDatabase() {
  */
 // Security middleware - adds security headers
 app.use(helmet());
-
+app.use(cookie_parser());
 // CORS middleware - allows requests from React frontend
-const cors_options = {
-    origin: process.env.CLIENT_URL || 'http://localhost:3000',
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    optionsSuccessStatus: 200, // This option handles the HTTP status code returned for OPTIONS preflight request
-};
-app.use(cors(cors_options));
+app.use(cors(
+    {
+        origin: process.env.CLIENT_URL || 'http://localhost:3000',
+        credentials: true,
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+        allowedHeaders: ['Content-Type', 'Authorization'],
+        optionsSuccessStatus: 200, // This option handles the HTTP status code returned for OPTIONS preflight request
+    }
+));
 
 // HTTP request logging for debugging
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));

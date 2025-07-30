@@ -81,6 +81,7 @@ export const login = (user_data) => api_call('/api/users/login', {
 export const checkAuth = async () => {
     try {
         const response = await api_call('/api/users/me', {
+            method: 'POST',
             credentials: 'include'
         });
         return response.user;

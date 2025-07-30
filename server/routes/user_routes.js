@@ -128,6 +128,9 @@ router.post('/login', loginLimit, async (req, res) => {
 router.post('/me', authenticate_jwt, async(req, res) => {
     try {
         const user_id = req.user.user_id;
+        console.log("HELLO");
+
+        await user_controller.authorize(user_id, res);
     } catch (error) {
         res.status(500).json({ success: false, message: 'Lỗi hệ thống' });
     }

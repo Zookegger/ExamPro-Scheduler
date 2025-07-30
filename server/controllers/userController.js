@@ -77,9 +77,12 @@ async function login(user_name, password, res) {
 			});
 		}
 
+        console.log(user.user_name);
+
         const payload = {
             user_id: user.user_id,
             user_name: user.user_name,
+            full_name: user.full_name,
             user_role: user.user_role,
             email: user.email
         };
@@ -103,8 +106,10 @@ async function login(user_name, password, res) {
 			message: "Đăng nhập thành công",
 			user: {
 				id: user.user_id,
-				username: user.user_name,
+                full_name: user.full_name,
+				user_name: user.user_name,
 				role: user.user_role,
+                email: user.email
 			},
 		});
 	} catch (error) {
@@ -128,9 +133,10 @@ async function authorize(user_id, res) {
         return res.json({
             success: true,
             user: {
-                user_id: user.user_id,
-                user_name: user.user_name,
-                user_role: user.user_role,
+                id: user.user_id,
+                full_name: user.full_name,
+				user_name: user.user_name,
+				role: user.user_role,
                 email: user.email
             }
         });
