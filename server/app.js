@@ -1,24 +1,3 @@
-/**
- * Health Check Endpoint
- * 
- * Provides system status information for monitoring and debugging.
- * This endpoint can be used to verify that the API server is running.
- * 
- * @route GET /api/health
- * @access Public
- * @returns {Object} JSON object with server status and timestamp
- * 
- * @example
- * // GET /api/health
- * // Response:
- * {
- *   "status": "OK",
- *   "message": "Hệ thống đang hoạt động bình thường", 
- *   "timestamp": "2025-07-21T10:30:00.000Z",
- *   "version": "1.0.0"
- * }
- */
-
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -27,6 +6,7 @@ const helmet = require('helmet');
 const path = require('path');
 const morgan = require('morgan');
 const { methods } = require('./models');
+
 require('dotenv').config();
 
 const app = express();
@@ -58,8 +38,12 @@ const server = http.createServer(app);
  */
 const io_stream = new Server(server, {
     cors: {
-        origin: "http://localhost:3000",
-        methods: ["GET", "POST"]
+        origin: process.env.CLIENT_URL || 'http://localhost:3000',
+        methods: ["GET", "POST"],
+        credentials: true
+    },
+    connectionStateRecovery: {
+        maxDisconnectionDuration: 2 * 60 * 1000, // 2 Minutes
     }
 });
 
@@ -190,14 +174,16 @@ setInterval(() => {
  * @throws {Error} If database connection or sync fails
  */
 async function initDatabase() {
-    await methods.create_database_if_not_exists();
-    await methods.testConnection();
-    await methods.syncDatabase();
-    await methods.create_default_admin_user();
+    try {
+        await methods.create_database_if_not_exists();
+        await methods.testConnection();
+        await methods.syncDatabase();
+        await methods.create_default_admin_user();
+    } catch (error) {
+        console.error('❌ Database initialization failed:', error);
+        process.exit(1); // Exit if DB connection fails
+    }
 }
-
-// Initialize database on server start
-initDatabase();
 
 /**
  * Middleware Configuration
@@ -209,10 +195,17 @@ initDatabase();
 app.use(helmet());
 
 // CORS middleware - allows requests from React frontend
-app.use(cors());
+const cors_options = {
+    origin: process.env.CLIENT_URL || 'http://localhost:3000',
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    optionsSuccessStatus: 200, // This option handles the HTTP status code returned for OPTIONS preflight request
+};
+app.use(cors(cors_options));
 
 // HTTP request logging for debugging
-app.use(morgan("combined"));
+app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
 // Request body parsing middleware
 app.use(express.json());
@@ -357,6 +350,9 @@ app.post('/api/test/timestamp', async (req, res) => {
 const api_routes = require('./routes');
 
 app.use('/api', api_routes);
+
+// Initialize database on server start
+initDatabase();
 
 /**
  * Start Server
