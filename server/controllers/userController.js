@@ -1,4 +1,5 @@
 const db = require('../models');
+const { generate_jwt } = require('../middleware/auth');
 
 /**
  * @typedef {Object} LoginResponse
@@ -76,9 +77,25 @@ async function login(user_name, password, res) {
 			});
 		}
 
+        const payload = {
+            user_id: user.user_id,
+            user_name: user.user_name,
+            user_role: user.user_role,
+            email: user.email
+        };
+
+        const options = {
+            expiresIn: '10d', // Token expires in 2 hours
+            issuer: 'exampro-scheduler', // Optional: your app name
+            audience: 'exampro-users',   // Optional: intended audience
+        };
+
+        const jwt_token = generate_jwt(payload, );
+
 		res.json({
 			success: true,
 			message: "Đăng nhập thành công",
+            token: jwt_token,
 			user: {
 				id: user.user_id,
 				username: user.user_name,
