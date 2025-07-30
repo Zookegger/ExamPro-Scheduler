@@ -1,6 +1,5 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../models');
 const user_controller = require('../controllers/userController');
 
 // Force sync database (for development only)

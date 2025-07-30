@@ -15,7 +15,7 @@ function LoginPage() {
 		console.log("Login attempted: ", { user_name, password });
 		try {
 			const result = await login({ user_name, password });
-			set_is_loading(false) 
+			
 			if (result.success) {
 				set_validation_message(result.message || "Đăng nhập thành công!");
 				// Forward to main page
@@ -29,6 +29,8 @@ function LoginPage() {
 		} catch (error) {
 			console.log('Login API error: ', error);
 	        set_validation_message("Lỗi kết nối máy chủ");
+		} finally {
+			set_is_loading(false);
 		}
 	};
 

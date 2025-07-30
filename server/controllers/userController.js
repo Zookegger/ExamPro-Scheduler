@@ -1,3 +1,5 @@
+const db = require('../models');
+
 /**
  * @typedef {Object} LoginResponse
  * @property {boolean} success - Indicates if the operation was successful
@@ -45,7 +47,7 @@
  *   error: "Invalid credentials"
  * }
  */
-exports.login = async (user_name, password, res) => {
+async function login(user_name, password, res) {
 	try {
 		if (!user_name | !password) {
 			res.status(400).json({
@@ -91,4 +93,8 @@ exports.login = async (user_name, password, res) => {
 			error: error.message,
 		});
 	}
-};
+}
+
+module.exports = {
+    login,
+}
