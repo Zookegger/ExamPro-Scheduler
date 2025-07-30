@@ -51,7 +51,7 @@ const { generate_jwt } = require('../middleware/auth');
 async function login(user_name, password, res) {
 	try {
 		if (!user_name | !password) {
-			res.status(400).json({
+			return res.status(400).json({
 				success: false,
 				message: "Tên tài khoản hoặc mật khẩu không được để trống",
 			});
@@ -62,7 +62,7 @@ async function login(user_name, password, res) {
 		});
 
 		if (!user) {
-			res.status(401).json({
+			return res.status(401).json({
 				success: false,
 				message: "Tài khoản không tồn tại",
 			});
@@ -84,18 +84,22 @@ async function login(user_name, password, res) {
             email: user.email
         };
 
-        const options = {
+        const jwt_token = generate_jwt(payload, {
             expiresIn: '10d', // Token expires in 2 hours
             issuer: 'exampro-scheduler', // Optional: your app name
             audience: 'exampro-users',   // Optional: intended audience
-        };
+        });
 
-        const jwt_token = generate_jwt(payload, );
+        res.cookie('jwt_token', jwt_token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production', // only send over HTTPS in production
+            sameSite: 'strict',
+            maxAge: 10 * 24 * 60 * 60 * 1000
+        });
 
-		res.json({
+		return res.json({
 			success: true,
 			message: "Đăng nhập thành công",
-            token: jwt_token,
 			user: {
 				id: user.user_id,
 				username: user.user_name,
@@ -104,7 +108,7 @@ async function login(user_name, password, res) {
 		});
 	} catch (error) {
 		console.error("❌ Login failed:", error);
-		res.status(500).json({
+		return res.status(500).json({
 			success: false,
 			message: "Đã xảy ra lỗi khi đăng nhập",
 			error: error.message,

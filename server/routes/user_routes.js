@@ -1,6 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const user_controller = require('../controllers/userController');
+const rateLimit = require('express-rate-limit');
+
+const loginLimit = rateLimit.rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 Minutes
+    max: 5, // Limit each IP to 4 login requests per window
+    message: 'Quá nhiều lần thử đăng nhập, vui lòng thử lại sau 15 phút'
+})
 
 /**
  * @route POST /api/users/login
@@ -38,16 +45,26 @@ const user_controller = require('../controllers/userController');
  *   "message": "Tên tài khoản hoặc mật khẩu không được để trống"
  * }
  */
-router.post('/login', async (req, res) => {
+router.post('/login', loginLimit, async (req, res) => {
     const { user_name, password } = req.body;
     
-    if (!user_name | !password) {
-        res.status(400).json({
+    if (!user_name || !password) {
+        return res.status(400).json({
             success: false,
             message: 'Tên tài khoản hoặc mật khẩu không được để trống'
         });
     }
-    await user_controller.login(user_name, password, res);
+
+    try {
+        await user_controller.login(user_name, password, res);
+    } catch (error) {
+        // Handle any unexpected errors in the controller
+        console.error('Route-level login error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Lỗi hệ thống'
+        });
+    }
 });
 
 module.exports = router;
