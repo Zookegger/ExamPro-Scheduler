@@ -26,7 +26,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const path = require('path');
 const morgan = require('morgan');
-const { testConnection, syncDatabase, create_database_if_not_exists } = require('./models');
+const { methods } = require('./models');
 require('dotenv').config();
 
 const app = express();
@@ -190,9 +190,10 @@ setInterval(() => {
  * @throws {Error} If database connection or sync fails
  */
 async function initDatabase() {
-    await create_database_if_not_exists();
-    await testConnection();
-    await syncDatabase();
+    await methods.create_database_if_not_exists();
+    await methods.testConnection();
+    await methods.syncDatabase();
+    await methods.create_default_admin_user();
 }
 
 // Initialize database on server start
@@ -325,7 +326,7 @@ app.post('/api/test/timestamp', async (req, res) => {
     try {
         const { Subject } = require('./models');
         
-        // Create a test subject
+        //  a test subject
         const testSubject = await Subject.create({
             subject_code: `TEST_${Date.now()}`,
             subject_name: 'Test Subject for Timestamp',
@@ -351,6 +352,11 @@ app.post('/api/test/timestamp', async (req, res) => {
         });
     }
 });
+
+//============ IMPORTING ROUTES ============//
+const api_routes = require('./routes');
+
+app.use('/api', api_routes);
 
 /**
  * Start Server
