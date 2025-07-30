@@ -58,8 +58,6 @@ exports.login = async (user_name, password, res) => {
 			where: { user_name },
 		});
 
-		console.log("🔍 User lookup result:", user ? "Found" : "Not found");
-
 		if (!user) {
 			res.status(401).json({
 				success: false,
@@ -68,11 +66,6 @@ exports.login = async (user_name, password, res) => {
 		}
 
 		const is_password_valid = await user.checkPassword(password);
-
-		console.log(
-			"🔍 Available methods:",
-			Object.getOwnPropertyNames(Object.getPrototypeOf(user))
-		);
 
 		if (!is_password_valid) {
 			return res.json({
