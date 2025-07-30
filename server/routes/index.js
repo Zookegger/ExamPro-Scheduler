@@ -29,6 +29,7 @@ const auth_routes = require('./auth_routes');
 const registration_routes = require('./registration_routes');
 const room_routes = require('./room_routes');
 const subject_routes = require('./subject_routes');
+const admin_routes = require('./admin_routes');
 
 /**
  * Mount Route Modules
@@ -48,19 +49,22 @@ const subject_routes = require('./subject_routes');
 // User management routes
 router.use('/users', user_routes);
 
-// Exam management routes  
-router.use('/exams', exam_routes);
+// // Exam management routes  
+// router.use('/exams', exam_routes);
 
-// Authentication routes
-router.use('/auths', auth_routes);
+// // Authentication routes
+// router.use('/auths', auth_routes);
 
-// Registration management routes
-router.use('/registrations', registration_routes);
+// // Registration management routes
+// router.use('/registrations', registration_routes);
 
-// Room management routes 
-router.use('/rooms', room_routes);
+// // Room management routes 
+// router.use('/rooms', room_routes);
 
-// Subject management routes
-router.use('/subjects', subject_routes);
+// // Subject management routes
+// router.use('/subjects', subject_routes);
+
+// Admin routes (development only)
+router.use('/admin', admin_routes);
 
 module.exports = router;

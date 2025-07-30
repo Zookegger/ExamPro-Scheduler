@@ -32,7 +32,7 @@ router.post('/login', async (req, res) => {
         console.log('🔍 Available methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(user)));
 
         if (!is_password_valid) {
-            return res.status(401).json({
+            return res.json({
                 success: false,
                 message: 'Mật khẩu không chính xác',
             });
