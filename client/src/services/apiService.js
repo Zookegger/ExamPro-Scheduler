@@ -78,6 +78,10 @@ export const login = (user_data) => api_call('/api/users/login', {
     credentials: 'include',
 });
 
+export const logout = () => api_call('/api/users/logout', {
+    method: 'POST',
+});
+
 export const checkAuth = async () => {
     try {
         const response = await api_call('/api/users/me', {
@@ -89,4 +93,4 @@ export const checkAuth = async () => {
         console.error('Not authenticated: ', error);
         return null;
     }
-}
+};

@@ -319,10 +319,10 @@ app.get('/api/debug/connections', (req, res) => {
  */
 app.post('/api/test/timestamp', async (req, res) => {
     try {
-        const { Subject } = require('./models');
+        const { models } = require('./models');
         
         //  a test subject
-        const testSubject = await Subject.create({
+        const testSubject = await models.Subject.create({
             subject_code: `TEST_${Date.now()}`,
             subject_name: 'Test Subject for Timestamp',
             department: 'Test Department',

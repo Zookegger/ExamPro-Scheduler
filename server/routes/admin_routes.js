@@ -3,10 +3,13 @@ const router = express.Router();
 const db = require('../models');
 const { utility } = require('../models');
 const { Op, Sequelize } = require('sequelize');
+
+
+const diagnose_router = express.Router();
 /**
  * Force Database Synchronization
  * 
- * @route POST /api/admin/sync-database
+ * @route POST /api/admin/diagnose/sync-database
  * @description Forcefully recreates all database tables with current model schemas
  * @access Admin only (DEVELOPMENT ONLY - DESTRUCTIVE OPERATION)
  * @warning ⚠️ This DELETES ALL DATA and recreates tables from scratch
@@ -19,7 +22,7 @@ const { Op, Sequelize } = require('sequelize');
  * 
  * @example
  * // Request
- * POST /api/admin/sync-database
+ * POST /api/admin/diagnose/sync-database
  * Content-Type: application/json
  * 
  * // Success Response (200)
@@ -37,7 +40,7 @@ const { Op, Sequelize } = require('sequelize');
  *   "error": "Connection timeout"
  * }
  */
-router.post('/sync-database', async (req, res) => {
+diagnose_router.post('/sync-database', async (req, res) => {
     try {
         console.log('🔄 Starting force database sync...');
         
@@ -65,7 +68,7 @@ router.post('/sync-database', async (req, res) => {
 /**
  * Get Database Table Status
  * 
- * @route GET /api/admin/table-status
+ * @route GET /api/admin/diagnose/table-status
  * @description Check existence and status of all database tables
  * @access Admin only
  * 
@@ -103,7 +106,7 @@ router.post('/sync-database', async (req, res) => {
  *   "timestamp": "2025-01-29T10:30:00.000Z"
  * }
  */
-router.get('/table-status', async (req, res) => {
+diagnose_router.get('/table-status', async (req, res) => {
     try {
         const tables = {};
         
@@ -161,7 +164,7 @@ router.get('/table-status', async (req, res) => {
 /**
  * Clear Test Data
  * 
- * @route DELETE /api/admin/clear-test-data
+ * @route DELETE /api/admin/diagnose/clear-test-data
  * @description Remove test data from database (development only)
  * @access Admin only
  * @warning Removes records matching test patterns
@@ -187,7 +190,7 @@ router.get('/table-status', async (req, res) => {
  *   "timestamp": "2025-01-29T10:30:00.000Z"
  * }
  */
-router.delete('/clear-test-data', async (req, res) => {
+diagnose_router.delete('/clear-test-data', async (req, res) => {
     try {
         console.log('🗑️ Starting test data cleanup...');
         
@@ -234,7 +237,7 @@ router.delete('/clear-test-data', async (req, res) => {
 /**
  * Get Database Connection Information
  * 
- * @route GET /api/admin/db-info
+ * @route GET /api/admin/diagnose/db-info
  * @description Retrieve database connection configuration
  * @access Admin only
  * 
@@ -290,5 +293,11 @@ router.get('/db-info', async (req, res) => {
         });
     }
 });
+
+router.use('/diagnose', diagnose_router);
+
+
+
+
 
 module.exports = router;

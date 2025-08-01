@@ -5,7 +5,22 @@ import DevelopmentPage from "./pages/DevelopmentPage";
 import LoginPage from "./pages/LoginPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import "./App.css";
-import { checkAuth } from "./services/apiService";
+import { checkAuth, logout } from "./services/apiService";
+import ManageUserPage from "./pages/ManageUserPage";
+
+function get_role_text(user_role) {
+	switch (user_role) {
+		case "admin":
+			return "Quản trị viên";
+		case "teacher":
+			return "Giáo viên";
+		case "student":
+			return "Học sinh";
+		case "Guest":
+		default:
+			return "Khách";
+	}
+}
 
 /**
  * Main App Component with Routing
@@ -20,27 +35,42 @@ function App() {
 		window.location.hostname === "localhost";
 	const [is_logged_in, set_is_logged_in] = useState(false);
 	const [current_user_id, set_current_user_id] = useState("");
+	const [current_full_name, set_current_full_name] = useState("");
 	const [current_user_name, set_current_user_name] = useState("");
 	const [current_user_role, set_current_user_role] = useState("Guest");
 
-    useEffect(() => {
-        async function check_auth_status() {
-            const user = await checkAuth();
-            if (user) {
-                set_is_logged_in(true);
-                set_current_user_id(user.id);
-                set_current_user_name(user.user_name);
-                set_current_user_role(user.role);
-            } else {
-                set_is_logged_in(false);
-                set_current_user_id("");
-                set_current_user_name("Guest user");
-                set_current_user_role("Guest");
-            }
-        }
-        
-        check_auth_status();
-    }, []);
+	async function handle_logout() {
+		const result = await logout();
+
+		if (result.success) {
+			set_is_logged_in(false);
+			set_current_user_id("");
+			set_current_user_name("Guest user");
+			set_current_full_name("Guest");
+			set_current_user_role("Guest");
+		}
+	}
+
+	useEffect(() => {
+		async function check_auth_status() {
+			const user = await checkAuth();
+			if (user) {
+				set_is_logged_in(true);
+				set_current_user_id(user.id);
+				set_current_user_name(user.user_name);
+				set_current_full_name(user.full_name);
+				set_current_user_role(user.role);
+			} else {
+				set_is_logged_in(false);
+				set_current_user_id("");
+				set_current_user_name("Guest user");
+				set_current_full_name("Guest");
+				set_current_user_role("Guest");
+			}
+		}
+
+		check_auth_status();
+	}, []);
 
 	return (
 		<Router>
@@ -72,19 +102,37 @@ function App() {
 						>
 							<div className="navbar-nav me-auto">
 								<Link className="nav-link" to="/">
-                                    🏠 Trang Chủ
-                                </Link>
+									🏠 Trang Chủ
+								</Link>
 								{is_development && (
-									<Link className="nav-link" to="/development">
+									<Link
+										className="nav-link"
+										to="/development"
+									>
 										🛠️ Development
 									</Link>
 								)}
 							</div>
 							<div className="navbar-nav">
 								{is_logged_in ? (
-									<span>
-										Xin chào, {current_user_name} ({current_user_role})
-									</span>
+									<div className="d-flex align-items-center gap-3">
+										<div className="d-flex align-items-center gap-2">
+											<span className="badge bg-light text-dark px-3 py-2">
+												{get_role_text(
+													current_user_role
+												)}
+											</span>
+											<span className="text-white">
+												{current_full_name}
+											</span>
+										</div>
+										<button
+											className="btn btn-outline-light"
+											onClick={handle_logout}
+										>
+											🚪 Đăng xuất
+										</button>
+									</div>
 								) : (
 									<Link className="nav-link" to="/login">
 										🔐 Đăng Nhập
@@ -98,7 +146,14 @@ function App() {
 				{/* Main Content Area */}
 				<main className="container-fluid d-flex flex-column flex-grow-1 bg-body-secondary">
 					<Routes>
-						<Route path="/" element={<MainPage current_user_role={current_user_role}/>} />
+						<Route
+							path="/"
+							element={
+								<MainPage
+									current_user_role={current_user_role}
+								/>
+							}
+						/>
 						{is_development && (
 							<Route
 								path="/development"
@@ -127,14 +182,25 @@ function App() {
 								<LoginPage
 									set_is_logged_in={set_is_logged_in}
 									set_current_user_id={set_current_user_id}
-									set_current_user_name={set_current_user_name}
-									set_current_user_role={set_current_user_role}
+									set_current_user_name={
+										set_current_user_name
+									}
+									set_current_full_name={
+										set_current_full_name
+									}
+									set_current_user_role={
+										set_current_user_role
+									}
 								/>
 							}
 						/>
 						<Route
 							path="/forgot-password"
 							element={<ForgotPasswordPage></ForgotPasswordPage>}
+						/>
+						<Route
+							path="/admin/manage-user"
+							element={<ManageUserPage></ManageUserPage>}
 						/>
 					</Routes>
 				</main>

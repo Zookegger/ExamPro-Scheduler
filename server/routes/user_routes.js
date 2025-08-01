@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const user_controller = require('../controllers/userController');
+const { userController } = require('../controllers/userController');
 const rateLimit = require('express-rate-limit');
 const { authenticate_jwt } = require('../middleware/auth');
 
@@ -35,7 +35,7 @@ const loginLimit = rateLimit.rateLimit({
 /**
  * @route POST /api/users/login
  * @description Handles user login requests. Extracts user_name and password from request body,
- * validates input, and delegates authentication logic to the user_controller.
+ * validates input, and delegates authentication logic to the userController.
  * Returns a JSON response indicating success or failure.
  * 
  * @param {Object} req - Express request object
@@ -79,7 +79,7 @@ router.post('/login', loginLimit, async (req, res) => {
     }
 
     try {
-        await user_controller.login(user_name, password, res);
+        await userController.login(user_name, password, res);
     } catch (error) {
         // Handle any unexpected errors in the controller
         console.error('Route-level login error:', error);
@@ -89,6 +89,19 @@ router.post('/login', loginLimit, async (req, res) => {
         });
     }
 });
+
+router.post('/logout', async(req, res) => {
+    try {
+        await userController.logout(res);
+    } catch (error) {
+        // Handle any unexpected errors in the controller
+        console.error('Route-level login error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Lỗi hệ thống'
+        });
+    }
+})
 
 /**
  * @route POST /api/users/me
@@ -130,7 +143,7 @@ router.post('/me', authenticate_jwt, async(req, res) => {
         const user_id = req.user.user_id;
         console.log("HELLO");
 
-        await user_controller.authorize(user_id, res);
+        await userController.authorize(user_id, res);
     } catch (error) {
         res.status(500).json({ success: false, message: 'Lỗi hệ thống' });
     }

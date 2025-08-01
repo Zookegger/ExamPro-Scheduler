@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { BrowserRouter as Router, Routes, Route, Link, useNavigate,} from 'react-router-dom';
 import { login } from "../services/apiService";
 
-function LoginPage({ set_is_logged_in, set_current_user_id, set_current_user_name, set_current_user_role }) {
+function LoginPage({ set_is_logged_in, set_current_user_id, set_current_user_name, set_current_full_name, set_current_user_role }) {
 	const [user_name, set_user_name] = useState("");
 	const [password, set_password] = useState("");
 	const [validation_message, set_validation_message] = useState("");
@@ -21,6 +21,7 @@ function LoginPage({ set_is_logged_in, set_current_user_id, set_current_user_nam
 				set_is_logged_in(true);
 				set_current_user_id(result.user.user_id);
 				set_current_user_name(result.user.user_name);
+				set_current_full_name(result.user.full_name);
 				set_current_user_role(result.user.role);
 				
 				// Forward to main page

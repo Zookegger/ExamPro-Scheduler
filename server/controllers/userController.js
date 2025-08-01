@@ -113,12 +113,19 @@ async function login(user_name, password, res) {
 			},
 		});
 	} catch (error) {
-		console.error("❌ Login failed:", error);
-		return res.status(500).json({
-			success: false,
-			message: "Đã xảy ra lỗi khi đăng nhập",
-			error: error.message,
-		});
+		throw error;
+	}
+}
+
+async function logout(res) {
+    try {
+        res.clearCookie('jwt_token');
+        return res.json({
+            success: true,
+            message: "Đăng xuất thành công"
+        })
+    } catch (error) {
+		throw error;
 	}
 }
 
@@ -146,6 +153,9 @@ async function authorize(user_id, res) {
 }
 
 module.exports = {
-    login,
-    authorize
+    userController: {
+        login,
+        logout,
+        authorize
+    },
 }

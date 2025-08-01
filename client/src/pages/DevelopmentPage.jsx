@@ -603,18 +603,6 @@ function DevelopmentPage() {
                 <div className="col-12">
                     <div className="d-flex justify-content-between align-items-center mb-4">
                         <h1>🛠️ Development Dashboard</h1>
-                        <div>
-                            <label className="me-2">Test Role:</label>
-                            <select 
-                                className="form-select d-inline-block w-auto"
-                                value={current_user_role}
-                                onChange={(e) => set_current_user_role(e.target.value)}
-                            >
-                                <option value="student">Student</option>
-                                <option value="teacher">Teacher</option>
-                                <option value="admin">Admin</option>
-                            </select>
-                        </div>
                     </div>
                 </div>
             </div>
