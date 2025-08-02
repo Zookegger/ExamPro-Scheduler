@@ -68,7 +68,7 @@ const loginLimit = rateLimit.rateLimit({
  *   "message": "Tên tài khoản hoặc mật khẩu không được để trống"
  * }
  */
-router.post('/login', loginLimit, async (req, res) => {
+router.post('/login', loginLimit, async (req, res, next) => {
     const { user_name, password } = req.body;
     
     if (!user_name || !password) {
@@ -81,25 +81,19 @@ router.post('/login', loginLimit, async (req, res) => {
     try {
         await userController.login(user_name, password, res);
     } catch (error) {
-        // Handle any unexpected errors in the controller
-        console.error('Route-level login error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Lỗi hệ thống'
-        });
+        console.error('❌ Route-level login error:', error);
+        // Pass to Express error handler
+        next(error);
     }
 });
 
-router.post('/logout', async(req, res) => {
+router.post('/logout', async(req, res, next) => {
     try {
         await userController.logout(res);
     } catch (error) {
-        // Handle any unexpected errors in the controller
-        console.error('Route-level login error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Lỗi hệ thống'
-        });
+        console.error('❌ Route-level logout error:', error);
+        // Pass to Express error handler
+        next(error);
     }
 })
 
@@ -138,15 +132,69 @@ router.post('/logout', async(req, res) => {
  *   "message": "Lỗi hệ thống"
  * }
  */
-router.post('/me', authenticate_jwt, async(req, res) => {
+router.post('/me', authenticate_jwt, async(req, res, next) => {
     try {
         const user_id = req.user.user_id;
-        console.log("HELLO");
 
         await userController.authorize(user_id, res);
     } catch (error) {
-        res.status(500).json({ success: false, message: 'Lỗi hệ thống' });
+        console.error('❌ Route-level authorize error:', error);
+        // Pass to Express error handler
+        next(error);
     }
+});
+
+/**
+ * Error Handler Middleware for User Routes
+ * 
+ * Catches any errors passed via next(error) from route handlers
+ * and provides consistent error response format for user-related operations.
+ * 
+ * @param {Error} error - The error object passed from previous middleware
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object  
+ * @param {Function} next - Express next function
+ */
+router.use((error, req, res, next) => {
+    console.error('❌ User route error:', error);
+    
+    // If response already sent, delegate to Express default error handler
+    if (res.headersSent) {
+        return next(error);
+    }
+    
+    // Authentication errors
+    if (error.name === 'JsonWebTokenError') {
+        return res.status(401).json({
+            success: false,
+            message: 'Token không hợp lệ'
+        });
+    }
+    
+    // Database connection errors
+    if (error.name === 'SequelizeConnectionError') {
+        return res.status(503).json({
+            success: false,
+            message: 'Lỗi kết nối cơ sở dữ liệu',
+            error: process.env.NODE_ENV === 'development' ? error.message : 'Database unavailable'
+        });
+    }
+    
+    // Validation errors
+    if (error.name === 'SequelizeValidationError') {
+        return res.status(400).json({
+            success: false,
+            message: 'Dữ liệu không hợp lệ',
+            error: process.env.NODE_ENV === 'development' ? error.message : 'Validation failed'
+        });
+    }
+    
+    // Default error response
+    res.status(500).json({
+        success: false,
+        message: 'Lỗi hệ thống',
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
 });
 
 module.exports = router;

@@ -25,9 +25,8 @@ function LoginPage({ set_is_logged_in, set_current_user_id, set_current_user_nam
 				set_current_user_role(result.user.role);
 				
 				// Forward to main page
-				setTimeout((e) => {
-					navigate('/');
-				}, 2000);
+				
+				navigate('/');
 			}
 			else {
 				set_validation_message(result.message || "Đăng nhập thất bại");

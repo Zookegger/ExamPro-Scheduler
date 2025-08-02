@@ -26,15 +26,18 @@ require('dotenv').config(); // Load environment variables from .env file
 User.hasMany(Registration, {
 	foreignKey: "student_id",
 	as: "exam_registrations",
-    onDelete: "CASCADE"
+    onDelete: "CASCADE",
+    onUpdate: "CASCADE"
 });
 
-// Proctor-Exam - Many-to-Many relationship
+// Proctor-Exam - Many-to-Many relationship (simplified constraints)
 User.belongsToMany(Exam, {
 	through: ExamProctor,
 	foreignKey: "proctor_id",
 	otherKey: "exam_id",
 	as: "proctored_exams",
+    onDelete: "CASCADE",
+    onUpdate: "CASCADE"
 });
 
 Exam.belongsToMany(User, {
@@ -42,23 +45,31 @@ Exam.belongsToMany(User, {
 	foreignKey: "exam_id",
 	otherKey: "proctor_id",
 	as: "proctors",
+    onDelete: "CASCADE",
+    onUpdate: "CASCADE"
 });
 
 // Exam associations
 Exam.belongsTo(Room, { 
     foreignKey: "room_id", 
-    as: "room" 
+    as: "room",
+    onDelete: "SET NULL",
+    onUpdate: "CASCADE"
 });
 
 Exam.belongsTo(Subject, { 
     foreignKey: "subject_code", 
     targetKey: "subject_code",
-    as: "subject"
+    as: "subject",
+    onDelete: "RESTRICT",
+    onUpdate: "CASCADE"
 });
 
 Exam.hasMany(Registration, {
     foreignKey: 'exam_id',
-    as: 'registrations'
+    as: 'registrations',
+    onDelete: "CASCADE",
+    onUpdate: "CASCADE"
 });
 
 // Subject associations
@@ -66,23 +77,31 @@ Subject.hasMany(Exam, {
 	foreignKey: "subject_code",
 	sourceKey: "subject_code",
 	as: "exams",
+    onDelete: "RESTRICT",
+    onUpdate: "CASCADE"
 });
 
 // Registration associations
 Registration.belongsTo(User, { 
 	foreignKey: "student_id", 
-	as: "student"
+	as: "student",
+    onDelete: "CASCADE",
+    onUpdate: "CASCADE"
 });
 
 Registration.belongsTo(Exam, { 
     foreignKey: "exam_id", 
-    as: "exam"
+    as: "exam",
+    onDelete: "CASCADE",
+    onUpdate: "CASCADE"
 });
 
-// Room assocations
+// Room associations
 Room.hasMany(Exam, { 
     foreignKey: "room_id", 
-    as: "exams"
+    as: "exams",
+    onDelete: "SET NULL",
+    onUpdate: "CASCADE"
 });
 
 // =============================================
@@ -111,7 +130,7 @@ async function testConnection() {
  * Synchronizes database models with the database
  * 
  * This creates tables if they don't exist and updates them if they do.
- * Setting force to true would drop and recreate tables (destructive).
+ * Using alter: true for development to modify existing tables safely.
  * 
  * @async
  * @param {boolean} force - Whether to drop tables before creating
@@ -119,13 +138,27 @@ async function testConnection() {
  */
 async function syncDatabase() {
 	try {
-		// Use force: true to drop and recreate tables with proper timestamp defaults
-		// This fixes the timestamp NULL issue by ensuring fresh table creation
-		await sequelize.sync({ force: true });
-		console.log("🗃️  Database tables dropped and recreated successfully.");
-		console.log("✅ Timestamp columns now have proper DEFAULT CURRENT_TIMESTAMP settings.");
+		// Use alter: true for development - modifies existing tables without dropping them
+		// This avoids the "too many keys" error by working with existing schema
+		await sequelize.sync({ 
+			alter: process.env.NODE_ENV === 'development',
+			force: false // Never force drop in production
+		});
+		console.log("🗃️  Database tables synchronized successfully.");
+		console.log("✅ Schema updated to match model definitions.");
 	} catch (error) {
 		console.error(`❌ Error synchronizing database: ${error}`);
+		
+		// If sync fails due to key limit, try without altering
+		if (error.message.includes('Too many keys specified')) {
+			console.log("🔧 Retrying sync without schema alterations...");
+			try {
+				await sequelize.sync({ force: false, alter: false });
+				console.log("✅ Database sync completed without schema changes.");
+			} catch (retryError) {
+				console.error(`❌ Retry failed: ${retryError}`);
+			}
+		}
 	}
 }
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { io } from 'socket.io-client';
+import AccessDeniedPage from './AccessDeniedPage';
 
 /**
  * Development Page Component
@@ -594,8 +595,10 @@ function DatabaseManagementPanel() {
 }
 
 // Main Development Page Component
-function DevelopmentPage() {
-    const [current_user_role, set_current_user_role] = useState("admin");
+function DevelopmentPage({current_user_role}) {
+    if (current_user_role !== 'admin') {
+        return <AccessDeniedPage></AccessDeniedPage>;
+    }
 
     return (
         <div className="container-fluid mt-4">

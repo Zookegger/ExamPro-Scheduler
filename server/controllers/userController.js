@@ -50,7 +50,7 @@ const { generate_jwt } = require('../middleware/auth');
  */
 async function login(user_name, password, res) {
 	try {
-		if (!user_name | !password) {
+		if (!user_name || !password) {
 			return res.status(400).json({
 				success: false,
 				message: "Tên tài khoản hoặc mật khẩu không được để trống",

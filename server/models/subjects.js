@@ -10,18 +10,19 @@ const { sequelize } = require('../config/database');
  * @property {number} subject_id - Unique identifier for the subject
  * @property {string} subject_code - Unique code for the subject (e.g., "MATH101")
  * @property {string} subject_name - Name of the subject in Vietnamese
- * @property {string} english_name - Optional English name of the subject
  * @property {string} department - Department that teaches this subject
- * @property {number} credit_hours - Number of credit hours for this subject
+ * @property {string} description - Description of the subject
+ * @property {number} credit - Total credit of the subject
+ * @property {boolean} is_active - Whether the subject is currently active
  * 
  * @example
  * // How to create a new subject:
  * const newSubject = await Subject.create({
  *   subject_code: 'MATH101',
  *   subject_name: 'Toán học đại cương',
- *   english_name: 'General Mathematics',
  *   department: 'Khoa Toán',
- *   credit_hours: 3
+ *   description: 'Toán học cơ bản và nâng cao',
+ *   is_active: true
  * });
  */
 
@@ -52,6 +53,11 @@ const Subject = sequelize.define('Subject', {
         type: DataTypes.TEXT,
         allowNull: true,
         comment: 'Description of the subject'
+    },
+    credit: {
+        type: DataTypes.TINYINT,
+        allowNull: true,
+        comment: 'Total credit'
     },
     is_active: {
         type: DataTypes.BOOLEAN,

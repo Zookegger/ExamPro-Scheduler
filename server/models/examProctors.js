@@ -60,7 +60,7 @@ const ExamProctor = sequelize.define('ExamProctor', {
     indexes: [{
         unique: true,
         fields: ['exam_id', 'proctor_id'],
-        name: 'exam_proctor_unique'
+        name: 'unique_exam_proctor'
     }]
 });
 

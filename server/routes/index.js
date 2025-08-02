@@ -49,20 +49,20 @@ const admin_routes = require('./admin_routes');
 // User management routes
 router.use('/users', user_routes);
 
-// // Exam management routes  
-// router.use('/exams', exam_routes);
+// Exam management routes  
+router.use('/exams', exam_routes);
 
-// // Authentication routes
-// router.use('/auths', auth_routes);
+// Authentication routes
+router.use('/auths', auth_routes);
 
-// // Registration management routes
-// router.use('/registrations', registration_routes);
+// Registration management routes
+router.use('/registrations', registration_routes);
 
-// // Room management routes 
-// router.use('/rooms', room_routes);
+// Room management routes 
+router.use('/rooms', room_routes);
 
-// // Subject management routes
-// router.use('/subjects', subject_routes);
+// Subject management routes
+router.use('/subjects', subject_routes);
 
 // Admin routes (development only)
 router.use('/admin', admin_routes);
