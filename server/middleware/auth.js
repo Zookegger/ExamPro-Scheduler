@@ -40,9 +40,7 @@ function generate_jwt(payload, options = {}) {
 function authenticate_jwt(req, res, next) {
     // Get JWT from cookie or Authorization header
     const token = req.cookies?.jwt_token || (req.headers['authorization'] ? req.headers['authorization'].split(' ')[1] : null);
-    console.log("[ JWT TOKEN ]: ", token);
-    
-    
+
     if (!token) {
         return res.status(401).json({
             success: false,
