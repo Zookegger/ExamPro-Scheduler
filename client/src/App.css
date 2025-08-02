@@ -44,3 +44,45 @@
     transform: rotate(360deg);
   }
 }
+
+/* Sidebar transition animations */
+.sidebar-transition {
+  transition: transform 0.3s ease-in-out, opacity 0.3s ease-in-out;
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.sidebar-hidden {
+  transform: translateX(-100%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.w-0 {
+  width: 0;
+  max-width: 0;
+  min-width: 0 !important;
+}
+/* Smooth hover effects for sidebar items */
+.hvr-underline-from-left:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.hvr-border-fade:hover {
+  border-left: 3px solid rgba(255, 255, 255, 0.8);
+}
+
+/* Floating button animations */
+.floating-toggle-btn {
+  transition: all 0.2s ease-in-out;
+}
+
+.floating-toggle-btn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Main content transition when sidebar toggles */
+.main-content-transition {
+  transition: margin-left 0.3s ease-in-out;
+}
