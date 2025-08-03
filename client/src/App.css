@@ -86,3 +86,73 @@
 .main-content-transition {
   transition: margin-left 0.3s ease-in-out;
 }
+
+/* Network Status Indicator Animations */
+.network-status-indicator {
+  will-change: transform, opacity;
+}
+
+.network-icon-show {
+  animation: networkSlideDown 0.4s ease-out forwards;
+}
+
+.network-icon-connected {
+  animation: networkConnectedSuccess 0.8s ease-out forwards;
+}
+
+@keyframes networkSlideDown {
+  0% {
+    transform: translateX(-50%) translateY(-100%);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes networkConnectedSuccess {
+  0% {
+    transform: translateX(-50%) translateY(0) scale(1);
+    opacity: 1;
+    background-color: #dc3545;
+  }
+  25% {
+    transform: translateX(-50%) translateY(0) scale(1.1);
+    background-color: #28a745;
+  }
+  50% {
+    transform: translateX(-50%) translateY(0) scale(1);
+    background-color: #28a745;
+  }
+  100% {
+    transform: translateX(-50%) translateY(-150%) scale(0.8);
+    opacity: 0;
+    background-color: #28a745;
+  }
+}
+
+@keyframes networkDisconnected {
+  0% {
+    transform: translateX(-50%) translateY(-100%);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Pulse animation for disconnected state */
+.network-status-indicator:not(.network-icon-connected) {
+  animation: networkPulse 2s ease-in-out infinite;
+}
+
+@keyframes networkPulse {
+  0%, 100% {
+    box-shadow: 0 2px 10px rgba(220, 53, 69, 0.3);
+  }
+  50% {
+    box-shadow: 0 2px 15px rgba(220, 53, 69, 0.6);
+  }
+}
