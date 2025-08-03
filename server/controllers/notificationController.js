@@ -13,7 +13,7 @@
 const { models } = require('../models');
 const { Notification, User } = models;
 const { Op } = require('sequelize');
-const { notify_user, create_system_announcement } = require('../services/notificationService');
+const { notifyUser, createSystemAnnouncement } = require('../services/notificationService');
 
 /**
  * Get all notifications for a specific user
@@ -22,7 +22,7 @@ const { notify_user, create_system_announcement } = require('../services/notific
  * @param {object} req - Express request object
  * @param {object} res - Express response object
  */
-const get_user_notifications = async (req, res) => {
+const getUserNotifications = async (req, res) => {
     try {
         const { user_id } = req.user; // From JWT token
         const { 
@@ -89,7 +89,7 @@ const get_user_notifications = async (req, res) => {
  * @param {object} req - Express request object
  * @param {object} res - Express response object
  */
-const mark_notifications_as_read = async (req, res) => {
+const markNotificationsAsRead = async (req, res) => {
     try {
         const { notification_ids } = req.body; // Array of notification IDs
         const user_id = req.user.user_id; // From auth middleware
@@ -132,56 +132,12 @@ const mark_notifications_as_read = async (req, res) => {
 };
 
 /**
- * Mark single notification as read (legacy function for compatibility)
- * 
- * @param {object} req - Express request object
- * @param {object} res - Express response object
- */
-const mark_notification_read = async (req, res) => {
-    try {
-        const { notification_id } = req.params;
-        const { user_id } = req.user;
-        
-        const [updated_rows] = await Notification.update(
-            { is_read: true },
-            { 
-                where: { 
-                    notification_id: parseInt(notification_id),
-                    user_id // Ensure user can only mark their own notifications
-                }
-            }
-        );
-        
-        if (updated_rows === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'Không tìm thấy thông báo'
-            });
-        }
-        
-        console.log(`✅ Marked notification ${notification_id} as read for user ${user_id}`);
-        
-        res.json({
-            success: true,
-            message: 'Đã đánh dấu đã đọc'
-        });
-        
-    } catch (error) {
-        console.error('❌ Mark notification read failed:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Lỗi cập nhật thông báo'
-        });
-    }
-};
-
-/**
  * Mark all notifications as read for a user
  * 
  * @param {object} req - Express request object
  * @param {object} res - Express response object
  */
-const mark_all_notifications_as_read = async (req, res) => {
+const markAllNotificationsAsRead = async (req, res) => {
     try {
         const user_id = req.user.user_id; // From auth middleware
 
@@ -220,7 +176,7 @@ const mark_all_notifications_as_read = async (req, res) => {
  * @param {number|object} user_id_or_req - User ID (for system calls) or req object (for API calls)
  * @param {object} notification_data_or_res - Notification data (for system calls) or res object (for API calls)
  */
-const create_notification = async (user_id_or_req, notification_data_or_res) => {
+const createNotification = async (user_id_or_req, notification_data_or_res) => {
     try {
         // Handle both API calls and direct function calls
         let user_id, notification_data, res;
@@ -313,7 +269,7 @@ const create_notification = async (user_id_or_req, notification_data_or_res) => 
  * @param {object} req - Express request object
  * @param {object} res - Express response object
  */
-const delete_notification = async (req, res) => {
+const deleteNotification = async (req, res) => {
     try {
         const { notification_id } = req.params;
         const user_id = req.user.user_id; // From auth middleware
@@ -378,11 +334,10 @@ const create_subject_notification = async (action, subject_data, admin_user_id) 
 };
 
 module.exports = {
-    get_user_notifications,
-    mark_notifications_as_read,
-    mark_notification_read, // Legacy function for compatibility
-    mark_all_notifications_as_read,
-    create_notification,
-    delete_notification,
+    getUserNotifications,
+    markNotificationsAsRead,
+    markAllNotificationsAsRead,
+    createNotification,
+    deleteNotification,
     create_subject_notification
 };

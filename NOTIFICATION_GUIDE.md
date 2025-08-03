@@ -10,7 +10,7 @@ The ExamPro notification system provides a **reusable, centralized** way to hand
 
 ```javascript
 // Import the notification service
-const { notify_admins, notify_user, notify_by_role } = require('../services/notificationService');
+const { notifyAdmins, notifyUser, notifyByRole } = require('../services/notificationService');
 
 // Example: Notify admins when a subject is created
 async function create_subject(req, res) {
@@ -19,7 +19,7 @@ async function create_subject(req, res) {
         const new_subject = await Subject.create(subject_data);
         
         // Notify all admins (except the creator) in real-time
-        await notify_admins('subject', 'created', new_subject, req.user);
+        await notifyAdmins('subject', 'created', new_subject, req.user);
         
         res.json({ success: true, data: new_subject });
     } catch (error) {
@@ -32,16 +32,16 @@ async function create_subject(req, res) {
 
 ```javascript
 // Notify all admins about resource changes
-await notify_admins('exam', 'updated', exam_data, current_user);
+await notifyAdmins('exam', 'updated', exam_data, current_user);
 
 // Notify specific user
-await notify_user(user_id, 'exam', 'reminder', exam_data);
+await notifyUser(user_id, 'exam', 'reminder', exam_data);
 
 // Notify all teachers
-await notify_by_role('teacher', 'system', 'maintenance', maintenance_info);
+await notifyByRole('teacher', 'system', 'maintenance', maintenance_info);
 
 // Notify multiple specific users
-await bulk_notify([user1_id, user2_id], 'grade', 'published', grade_data);
+await bulkNotify([user1_id, user2_id], 'grade', 'published', grade_data);
 ```
 
 ## 📋 Supported Resource Types
@@ -74,7 +74,7 @@ The system automatically handles Vietnamese naming for these resource types:
 
 ```javascript
 // Custom notification with options
-await notify_admins('subject', 'created', subject_data, current_user, {
+await notifyAdmins('subject', 'created', subject_data, current_user, {
     custom_title: 'Môn học đặc biệt được tạo',
     custom_message: 'Môn học VIP đã được thêm với quyền đặc biệt',
     notification_type: 'success'  // Override default type
@@ -86,12 +86,12 @@ await notify_admins('subject', 'created', subject_data, current_user, {
 ### Server Setup (Done automatically)
 ```javascript
 // In your main app.js (already configured)
-const { set_socket_io } = require('./services/notificationService');
+const { setSocketIO } = require('./services/notificationService');
 const { setup_notification_handlers } = require('./websocket/notificationHandlers');
 
 // Set up WebSocket for notifications
 setup_notification_handlers(io);
-set_socket_io(io);
+setSocketIO(io);
 ```
 
 ### Client-Side Integration (Frontend)
@@ -122,10 +122,10 @@ socket.emit('acknowledge_notification', notification_id);
 
 ### System Announcements
 ```javascript
-const { create_system_announcement } = require('../services/notificationService');
+const { createSystemAnnouncement } = require('../services/notificationService');
 
 // Send announcement to all users
-await create_system_announcement(
+await createSystemAnnouncement(
     'Bảo trì hệ thống',
     'Hệ thống sẽ bảo trì từ 2:00 - 4:00 sáng ngày mai',
     'warning',
@@ -135,10 +135,10 @@ await create_system_announcement(
 
 ### Cleanup Old Notifications
 ```javascript
-const { cleanup_old_notifications } = require('../services/notificationService');
+const { cleanupOldNotifications } = require('../services/notificationService');
 
 // Clean notifications older than 30 days
-const deleted_count = await cleanup_old_notifications(30);
+const deleted_count = await cleanupOldNotifications(30);
 console.log(`🧹 Cleaned ${deleted_count} old notifications`);
 ```
 
@@ -169,10 +169,10 @@ const id_fields = {
 
 2. **Use in your controller**:
 ```javascript
-const { notify_admins } = require('../services/notificationService');
+const { notifyAdmins } = require('../services/notificationService');
 
 // In your grade controller
-await notify_admins('grade', 'published', grade_data, req.user);
+await notifyAdmins('grade', 'published', grade_data, req.user);
 ```
 
 ## 🐛 Error Handling
@@ -185,7 +185,7 @@ try {
     const subject = await Subject.create(data);
     
     // Notifications won't break main functionality if they fail
-    await notify_admins('subject', 'created', subject, req.user);
+    await notifyAdmins('subject', 'created', subject, req.user);
     
     res.json({ success: true, data: subject });
 } catch (error) {
@@ -199,10 +199,10 @@ try {
 ### Test Real-Time Delivery
 ```javascript
 // In any controller or test file
-const { notify_user } = require('../services/notificationService');
+const { notifyUser } = require('../services/notificationService');
 
 // Send test notification
-await notify_user(1, 'system', 'test', { 
+await notifyUser(1, 'system', 'test', { 
     name: 'Test Notification',
     id: 999 
 });
@@ -242,7 +242,7 @@ GROUP BY user_id;
 
 ```javascript
 // Example: Exam Controller with notifications
-const { notify_admins, notify_by_role } = require('../services/notificationService');
+const { notifyAdmins, notifyByRole } = require('../services/notificationService');
 
 async function create_exam(req, res) {
     try {
@@ -250,11 +250,11 @@ async function create_exam(req, res) {
         const new_exam = await Exam.create(exam_data);
         
         // Notify admins about new exam
-        await notify_admins('exam', 'created', new_exam, req.user);
+        await notifyAdmins('exam', 'created', new_exam, req.user);
         
         // If exam is urgent, notify all teachers too
         if (new_exam.is_urgent) {
-            await notify_by_role('teacher', 'exam', 'urgent_created', new_exam, {
+            await notifyByRole('teacher', 'exam', 'urgent_created', new_exam, {
                 custom_message: `Kỳ thi khẩn cấp "${new_exam.exam_name}" cần được chuẩn bị ngay`
             });
         }

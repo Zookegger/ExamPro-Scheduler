@@ -17,7 +17,7 @@ const exam_controller = {
      * @param {Object} res - Response object
      * @returns {Object} JSON response with exams
      */
-    get_all_exams: async (req, res) => {
+    getAllExams: async (req, res) => {
         try {
             // Extract query parameters
             const {

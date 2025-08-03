@@ -1,324 +1,258 @@
 const db = require('../models');
-const { notify_admins } = require('../services/notificationService');
+const { notifyAdmins } = require('../services/notificationService');
+
+// Constants for better maintainability
+const RESOURCE_TYPE = 'subject';
+const ADMIN_ROLE = 'admin';
+const ERROR_MESSAGES = {
+    PERMISSION_DENIED: 'Bạn không có quyền truy cập tài nguyên này',
+    SUBJECT_NOT_FOUND: 'Không tìm thấy môn học',
+    INVALID_QUERY: 'Invalid query parameters',
+    INVALID_JSON: 'Dữ liệu JSON không hợp lệ',
+    MISSING_FIELDS: 'Thiếu thông tin bắt buộc: mã môn học, tên môn học hoặc khoa',
+    DUPLICATE_CODE: 'Mã môn học đã tồn tại',
+    DUPLICATE_NAME: 'Tên môn học đã tồn tại',
+    NO_CHANGES: 'Không có thay đổi nào được thực hiện',
+    REFERENCED_SUBJECT: 'Không thể xóa môn học này vì đang có kỳ thi liên quan'
+};
 
 /**
- * Reusable helper function to notify admins about any resource changes
- * Uses the centralized notification service for consistency
- * @param {string} resource_type - Type of resource (subject, exam, user, etc.)
- * @param {string} action - 'created', 'updated', 'deleted', etc.
- * @param {object} resource_data - Resource information
+ * Reusable helper function to notify admins about resource changes
+ * @param {string} action - 'created', 'updated', 'deleted'
+ * @param {object} resource_data - Subject information
  * @param {object} current_user - User who performed the action
- * @param {object} options - Additional notification options
  */
-async function notify_admins_about_resource(resource_type, action, resource_data, current_user, options = {}) {
+async function notifyAdminsAboutSubject(action, resource_data, current_user) {
     try {
-        await notify_admins(resource_type, action, resource_data, current_user, options);
+        await notifyAdmins(RESOURCE_TYPE, action, resource_data, current_user);
     } catch (error) {
-        console.error(`❌ Error notifying admins about ${resource_type} change:`, error);
-        // Don't throw error - notifications shouldn't break main functionality
+        console.error(`❌ Error notifying admins about subject ${action}:`, error);
     }
 }
 
 /**
- * Legacy helper for backward compatibility
- * @deprecated Use notify_admins_about_resource instead
+ * Validates subject data
+ * @param {object} subjectData - Subject data to validate
+ * @returns {object} { isValid: boolean, message?: string }
  */
-async function notify_admins_about_subject(action, subject_data, current_user) {
-    return await notify_admins_about_resource('subject', action, subject_data, current_user);
+function validateSubjectData(subjectData) {
+    if (!subjectData.subject_code || !subjectData.subject_name || !subjectData.department) {
+        return { isValid: false, message: ERROR_MESSAGES.MISSING_FIELDS };
+    }
+    return { isValid: true };
 }
 
+/**
+ * Handles database errors and returns appropriate response
+ * @param {Error} error - The error object
+ * @param {Response} res - Express response object
+ * @returns {Response} Appropriate error response
+ */
+function handleDatabaseError(error, res) {
+    if (error.name === 'SequelizeUniqueConstraintError') {
+        const field = error.errors[0]?.path;
+        const message = field === 'subject_code' ? ERROR_MESSAGES.DUPLICATE_CODE : 
+                       field === 'subject_name' ? ERROR_MESSAGES.DUPLICATE_NAME : 
+                       ERROR_MESSAGES.DUPLICATE_DATA;
+        return res.status(409).json({ success: false, message });
+    }
+    
+    if (error.name === 'SequelizeForeignKeyConstraintError') {
+        return res.status(409).json({ success: false, message: ERROR_MESSAGES.REFERENCED_SUBJECT });
+    }
+    
+    if (error instanceof SyntaxError) {
+        return res.status(400).json({ success: false, message: ERROR_MESSAGES.INVALID_JSON });
+    }
+    
+    // For other errors, pass to the next middleware
+    return null;
+}
 
-async function get_all_subject(req, res, next) {
+async function getAllSubjects(req, res, next) {
     try {
-        // Use query parameters instead of route parameters
-        const where_clause = req.query || {};
+        const whereClause = req.query || {};
 
-        // Simple validation - no JSON parsing needed for query params
-        if (typeof where_clause !== 'object' || Array.isArray(where_clause)) {
+        if (typeof whereClause !== 'object' || Array.isArray(whereClause)) {
             return res.status(400).json({
                 success: false,
-                message: 'Invalid query parameters'
+                message: ERROR_MESSAGES.INVALID_QUERY
             });
         }
 
-        const subjects = await db.models.Subject.findAndCountAll({
-            where: where_clause,
+        const { rows, count } = await db.models.Subject.findAndCountAll({
+            where: whereClause,
         });
 
-        return res.json({
-            success: true,
-            subjects: subjects.rows,
-            count: subjects.count,
-        });
+        return res.json({ success: true, subjects: rows, count });
         
     } catch (error) {
         console.error('❌ Get all subjects failed:', error);
-        
-        if (error instanceof SyntaxError) {
-            return res.status(400).json({
-                success: false,
-                message: 'Invalid JSON in query parameters'
-            });
-        }
-        
-        // Pass to Express error handler
+        const handledResponse = handleDatabaseError(error, res);
+        if (handledResponse) return handledResponse;
         next(error);
     }
 }
 
-async function add_new_subject(req, res, next) {
+async function addNewSubject(req, res, next) {
     try {
-        // Check admin permission
-        if (req.user.user_role !== 'admin') {
+        if (req.user.user_role !== ADMIN_ROLE) {
             return res.status(403).json({
                 success: false,
-                message: 'Bạn không có quyền truy cập tài nguyên này'
+                message: ERROR_MESSAGES.PERMISSION_DENIED
             });
         }
 
-        const new_subject_data = req.body;
-
-        // Validate required fields
-        if (!new_subject_data.subject_code ||
-            !new_subject_data.subject_name ||
-            !new_subject_data.department) 
-        {
+        const newSubjectData = req.body;
+        const validation = validateSubjectData(newSubjectData);
+        
+        if (!validation.isValid) {
             return res.status(400).json({
                 success: false,
-                message: "Thiếu thông tin bắt buộc: mã môn học, tên môn học hoặc khoa"
+                message: validation.message
             });
         }
 
-        // Create new subject
-        const new_subject = await db.models.Subject.create({
-            subject_code: new_subject_data.subject_code,
-            subject_name: new_subject_data.subject_name,
-            department: new_subject_data.department,
-            description: new_subject_data.description || null,
-            is_active: new_subject_data.is_active ?? true,
+        const newSubject = await db.models.Subject.create({
+            subject_code: newSubjectData.subject_code,
+            subject_name: newSubjectData.subject_name,
+            department: newSubjectData.department,
+            description: newSubjectData.description || null,
+            is_active: newSubjectData.is_active ?? true,
         });
 
-        // Create notifications for other admins
-        await notify_admins_about_subject('created', new_subject, req.user);
+        await notifyAdminsAboutSubject('created', newSubject, req.user);
 
-        // Return success response with created data
         return res.status(201).json({
             success: true,
             message: "Tạo môn học mới thành công",
-            data: new_subject
+            data: newSubject
         });
 
     } catch (error) {
         console.error('❌ Create subject failed:', error);
-        
-        // Handle unique constraint violations
-        if (error.name === 'SequelizeUniqueConstraintError') {
-            const field = error.errors[0]?.path;
-            let message = 'Dữ liệu đã tồn tại trên hệ thống';
-            
-            if (field === 'subject_code') {
-                message = 'Mã môn học đã tồn tại';
-            } else if (field === 'subject_name') {
-                message = 'Tên môn học đã tồn tại';
-            }
-                      
-            return res.status(409).json({
-                success: false,
-                message: message
-            });
-        }
-        
-        if (error instanceof SyntaxError) {
-            return res.status(400).json({
-                success: false,
-                message: 'Dữ liệu JSON không hợp lệ'
-            });
-        }
-        
-        // Pass to Express error handler
+        const handledResponse = handleDatabaseError(error, res);
+        if (handledResponse) return handledResponse;
         next(error);
     }
 }
 
-async function update_subject(req, res, next) {
+async function updateSubject(req, res, next) {
     try {
-        // Check admin permission
-        if (req.user.user_role !== 'admin') {
+        if (req.user.user_role !== ADMIN_ROLE) {
             return res.status(403).json({
                 success: false,
-                message: 'Bạn không có quyền truy cập tài nguyên này'
+                message: ERROR_MESSAGES.PERMISSION_DENIED
             });
         }
 
-        // Get subject_id from URL params and data from body
-        const subject_id = req.params.subject_id;
-        const new_subject_data = req.body;
-
-        // First, let's await the database query
-        const old_subject = await db.models.Subject.findByPk(subject_id);
+        const subjectId = req.params.subject_id;
+        const newSubjectData = req.body;
         
-        // Check if subject exists
-        if (!old_subject) {
+        const validation = validateSubjectData(newSubjectData);
+        if (!validation.isValid) {
+            return res.status(400).json({
+                success: false,
+                message: validation.message
+            });
+        }
+
+        const oldSubject = await db.models.Subject.findByPk(subjectId);
+        if (!oldSubject) {
             return res.status(404).json({
                 success: false,
-                message: 'Không tìm thấy môn học'
+                message: ERROR_MESSAGES.SUBJECT_NOT_FOUND
             });
         }
 
-        // Check if no changes were made
-        if (old_subject.subject_code === new_subject_data.subject_code &&
-            old_subject.subject_name === new_subject_data.subject_name &&
-            old_subject.department === new_subject_data.department &&
-            old_subject.description === new_subject_data.description &&
-            old_subject.is_active === (new_subject_data.is_active ?? true)) {
+        // Check for no changes
+        if (oldSubject.subject_code === newSubjectData.subject_code &&
+            oldSubject.subject_name === newSubjectData.subject_name &&
+            oldSubject.department === newSubjectData.department &&
+            oldSubject.description === newSubjectData.description &&
+            oldSubject.is_active === (newSubjectData.is_active ?? true)) {
             return res.status(400).json({
                 success: false,
-                message: "Không có thay đổi nào được thực hiện"
+                message: ERROR_MESSAGES.NO_CHANGES
             });
         }
 
-        // Validate required fields
-        if (!new_subject_data.subject_code ||
-            !new_subject_data.subject_name ||
-            !new_subject_data.department) 
-        {
-            return res.status(400).json({
-                success: false,
-                message: "Trường dữ liệu bị thiếu"
-            });
-        }
-
-        // Update subject with WHERE clause to specify which row to update
-        const [updated_rows] = await db.models.Subject.update({
-            subject_code: new_subject_data.subject_code,
-            subject_name: new_subject_data.subject_name,
-            department: new_subject_data.department,
-            description: new_subject_data.description || null,
-            is_active: new_subject_data.is_active ?? true,
+        const [updatedRows] = await db.models.Subject.update({
+            subject_code: newSubjectData.subject_code,
+            subject_name: newSubjectData.subject_name,
+            department: newSubjectData.department,
+            description: newSubjectData.description || null,
+            is_active: newSubjectData.is_active ?? true,
         }, {
-            where: { subject_id: subject_id }  // ✅ Critical: WHERE clause to specify which row to update
+            where: { subject_id: subjectId }
         });
 
-        // Check if update was successful
-        if (updated_rows === 0) {
+        if (updatedRows === 0) {
             return res.status(400).json({
                 success: false,
                 message: "Không thể cập nhật môn học"
             });
         }
 
-        // Get the updated subject to return
-        const updated_subject = await db.models.Subject.findByPk(subject_id);
+        const updatedSubject = await db.models.Subject.findByPk(subjectId);
+        await notifyAdminsAboutSubject('updated', updatedSubject, req.user);
 
-        // Create notifications for other admins
-        await notify_admins_about_subject('updated', updated_subject, req.user);
-
-        // Return success response with updated data
         return res.status(200).json({
             success: true,
             message: "Cập nhật dữ liệu môn học thành công",
-            data: updated_subject
+            data: updatedSubject
         });
 
     } catch (error) {
         console.error('❌ Update subject failed:', error);
-        
-        // Handle unique constraint violations
-        if (error.name === 'SequelizeUniqueConstraintError') {
-            const field = error.errors[0]?.path;
-            let message = 'Dữ liệu đã tồn tại trên hệ thống';
-            
-            if (field === 'subject_code') {
-                message = 'Mã môn học đã tồn tại';
-            } else if (field === 'subject_name') {
-                message = 'Tên môn học đã tồn tại';
-            }
-                      
-            return res.status(409).json({
-                success: false,
-                message: message
-            });
-        }
-        
-        if (error instanceof SyntaxError) {
-            return res.status(400).json({
-                success: false,
-                message: 'Dữ liệu JSON không hợp lệ'
-            });
-        }
-        
-        // Pass to Express error handler
+        const handledResponse = handleDatabaseError(error, res);
+        if (handledResponse) return handledResponse;
         next(error);
     }
 }
 
-async function delete_subject(req, res, next) {
+async function deleteSubject(req, res, next) {
     try {
-        // Check admin permission
-        if (req.user.user_role !== 'admin') {
+        if (req.user.user_role !== ADMIN_ROLE) {
             return res.status(403).json({
                 success: false,
-                message: 'Bạn không có quyền truy cập tài nguyên này'
+                message: ERROR_MESSAGES.PERMISSION_DENIED
             });
         }
 
-        // Get subject_id from URL params
-        const subject_id = req.params.subject_id;
-
-        // First, check if subject exists
-        const subject_to_delete = await db.models.Subject.findByPk(subject_id);
+        const subjectId = req.params.subject_id;
+        const subjectToDelete = await db.models.Subject.findByPk(subjectId);
         
-        // Check if subject exists
-        if (!subject_to_delete) {
+        if (!subjectToDelete) {
             return res.status(404).json({
                 success: false,
-                message: 'Không tìm thấy môn học'
+                message: ERROR_MESSAGES.SUBJECT_NOT_FOUND
             });
         }
 
-        // Delete the subject - await is critical here!
-        await subject_to_delete.destroy();
+        await subjectToDelete.destroy();
+        await notifyAdminsAboutSubject('deleted', subjectToDelete, req.user);
 
-        // Create notifications for other admins
-        await notify_admins_about_subject('deleted', subject_to_delete, req.user);
-
-        // Return success response
         return res.status(200).json({
             success: true,
             message: "Xóa môn học thành công",
             data: {
-                deleted_subject_id: subject_id,
-                deleted_subject_name: subject_to_delete.subject_name
+                deleted_subject_id: subjectId,
+                deleted_subject_name: subjectToDelete.subject_name
             }
         });
 
     } catch (error) {
         console.error('❌ Delete subject failed:', error);
-        
-        // Handle foreign key constraint violations (if subject is referenced by exams)
-        if (error.name === 'SequelizeForeignKeyConstraintError') {
-            return res.status(409).json({
-                success: false,
-                message: 'Không thể xóa môn học này vì đang có kỳ thi liên quan'
-            });
-        }
-        
-        // Handle other database errors
-        if (error.name === 'SequelizeDatabaseError') {
-            return res.status(500).json({
-                success: false,
-                message: 'Lỗi cơ sở dữ liệu khi xóa môn học'
-            });
-        }
-        
-        // Pass to Express error handler
+        const handledResponse = handleDatabaseError(error, res);
+        if (handledResponse) return handledResponse;
         next(error);
     }
 }
 
 module.exports = {
-    get_all_subject,
-    add_new_subject,
-    update_subject,
-    delete_subject
-}
+    getAllSubjects,
+    addNewSubject,
+    updateSubject,
+    deleteSubject
+};

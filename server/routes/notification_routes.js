@@ -16,12 +16,11 @@
 const express = require('express');
 const router = express.Router();
 const {
-    get_user_notifications,
-    mark_notifications_as_read,
-    mark_notification_read,
-    mark_all_notifications_as_read,
-    create_notification,
-    delete_notification
+    getUserNotifications,
+    markNotificationsAsRead,
+    markAllNotificationsAsRead,
+    createNotification,
+    deleteNotification
 } = require('../controllers/notificationController');
 
 // Authentication middleware
@@ -37,22 +36,14 @@ const { require_admin_role } = require('../middleware/admin');
  * @query   {number} limit - Number of notifications to return (default: 20)
  * @query   {number} offset - Offset for pagination (default: 0)
  */
-router.get('/', authenticate_jwt, get_user_notifications);
-
-/**
- * @route   PUT /api/notifications/read
- * @desc    Mark multiple notifications as read (bulk operation)
- * @access  Private (requires JWT token)
- * @body    {array} notification_ids - Array of notification IDs to mark as read
- */
-router.put('/read', authenticate_jwt, mark_notifications_as_read);
+router.get('/', authenticate_jwt, getUserNotifications);
 
 /**
  * @route   PUT /api/notifications/read-all
  * @desc    Mark all notifications as read for the authenticated user
  * @access  Private (requires JWT token)
  */
-router.put('/read-all', authenticate_jwt, mark_all_notifications_as_read);
+router.put('/read-all', authenticate_jwt, markAllNotificationsAsRead);
 
 /**
  * @route   PUT /api/notifications/:notification_id/read
@@ -60,7 +51,7 @@ router.put('/read-all', authenticate_jwt, mark_all_notifications_as_read);
  * @access  Private (requires JWT token)
  * @param   {number} notification_id - ID of notification to mark as read
  */
-router.put('/:notification_id/read', authenticate_jwt, mark_notification_read);
+router.put('/:notification_id/read', authenticate_jwt, markNotificationsAsRead);
 
 /**
  * @route   POST /api/notifications
@@ -73,7 +64,7 @@ router.put('/:notification_id/read', authenticate_jwt, mark_notification_read);
  * @body    {number} related_id - Related resource ID (optional)
  * @body    {string} related_type - Related resource type (optional)
  */
-router.post('/', authenticate_jwt, require_admin_role, create_notification);
+router.post('/', authenticate_jwt, require_admin_role, createNotification);
 
 /**
  * @route   DELETE /api/notifications/:notification_id
@@ -81,6 +72,6 @@ router.post('/', authenticate_jwt, require_admin_role, create_notification);
  * @access  Private (requires JWT token, can only delete own notifications)
  * @param   {number} notification_id - ID of notification to delete
  */
-router.delete('/:notification_id', authenticate_jwt, delete_notification);
+router.delete('/:notification_id', authenticate_jwt, deleteNotification);
 
 module.exports = router;

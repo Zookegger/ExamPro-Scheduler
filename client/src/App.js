@@ -4,12 +4,12 @@ import {
 	Routes,
 	Route,
 	Link,
-	Navigate,
 	useNavigate,
 } from "react-router-dom";
 import "./App.css";
 import { LoginPage, DevelopmentPage, MainPage, ForgotPasswordPage, ManageUserPage, ManageExamPage, ManageRoomPage, ManageSchedulePage, ManageSubjectPage } from "./pages";
-import { checkAuth, logout } from "./services/apiService";
+import { checkAuth, logout, getUserNotifications, markNotificationsAsRead, markAllNotificationsAsRead } from "./services/apiService";
+import useWebsocketConnection from './hooks/use_websocket_connection';
 
 function get_role_text(user_role) {
 	switch (user_role) {
@@ -40,6 +40,61 @@ function AppContent({
 }) {
 	const navigate = useNavigate();
 	const [is_sidebar_visible, set_is_sidebar_visible] = useState(true);
+	
+	// Notification state
+	const [notifications, set_notifications] = useState([]);
+	const [is_notifications_offcanvas_visible, set_is_notifications_offcanvas_visible] = useState(false);
+	const [unread_count, set_unread_count] = useState(0);
+
+	// Real-time notification handlers
+	const handle_new_notification = (data) => {
+		if (data.success && data.notification) {
+			console.log('🔔 New notification received:', data.notification);
+			
+			// Add to notifications list
+			set_notifications(prev => [data.notification, ...prev]);
+			
+			// Update unread count
+			set_unread_count(prev => prev + 1);
+			
+			// Optional: Show browser notification
+			if (Notification.permission === 'granted') {
+				new Notification(data.notification.title, {
+					body: data.notification.message,
+					icon: '/favicon.ico'
+				});
+			}
+		}
+	};
+
+	const handle_unread_count_update = (data) => {
+		if (data.success) {
+			set_unread_count(data.unread_count);
+		}
+	};
+
+	// WebSocket connection for real-time notifications
+	const { emit_event, is_connected } = useWebsocketConnection({
+		events: {
+			'new_notification': handle_new_notification,
+			'unread_count_update': handle_unread_count_update,
+		},
+		auto_connect: is_logged_in && current_user_id
+	});
+
+	// Join notification room when user is logged in
+	useEffect(() => {
+		if (is_connected && current_user_id) {
+			emit_event('join_notification_room', current_user_id);
+		}
+	}, [is_connected, current_user_id, emit_event]);
+
+	// Request browser notification permission
+	useEffect(() => {
+		if (is_logged_in && 'Notification' in window && Notification.permission === 'default') {
+			Notification.requestPermission();
+		}
+	}, [is_logged_in]);
 
 	async function handle_logout() {
 		const result = await logout();
@@ -54,6 +109,75 @@ function AppContent({
 			navigate("/");
 		}
 	}
+
+	// Notification functions
+	async function load_notifications() {
+		try {
+			const response = await getUserNotifications();
+			if (response.success) {
+				// Handle different response structures
+				const notificationData = response.notifications || response.data || [];
+				set_notifications(Array.isArray(notificationData) ? notificationData : []);
+				const unread = notificationData.filter(n => !n.is_read).length;
+				set_unread_count(unread);
+			} else {
+				console.warn('Failed to load notifications:', response.message);
+				set_notifications([]);
+				set_unread_count(0);
+			}
+		} catch (error) {
+			console.error('Error loading notifications:', error);
+			set_notifications([]);
+			set_unread_count(0);
+		}
+	}
+
+	async function handle_notification_read(notification_id) {
+		try {
+			const response = await markNotificationsAsRead([notification_id]);
+			if (response.success) {
+				// Update local state immediately for better UX
+				set_notifications(prev => 
+					prev.map(notification => 
+						notification.notification_id === notification_id 
+							? { ...notification, is_read: true }
+							: notification
+					)
+				);
+				set_unread_count(prev => Math.max(0, prev - 1));
+			}
+		} catch (error) {
+			console.error('Error marking notification as read:', error);
+		}
+	}
+
+	async function handle_mark_all_read() {
+		try {
+			const response = await markAllNotificationsAsRead();
+			if (response.success) {
+				// Update local state immediately
+				set_notifications(prev => 
+					prev.map(notification => ({ ...notification, is_read: true }))
+				);
+				set_unread_count(0);
+			}
+		} catch (error) {
+			console.error('Error marking all notifications as read:', error);
+		}
+	}	function toggle_notifications_offcanvas() {
+		set_is_notifications_offcanvas_visible(!is_notifications_offcanvas_visible);
+	}
+
+	// Load notifications when user logs in
+	React.useEffect(() => {
+		if (is_logged_in && current_user_role === 'admin') {
+			load_notifications();
+			
+			// Set up periodic refresh for real-time updates
+			const interval = setInterval(load_notifications, 30000); // Every 30 seconds
+			return () => clearInterval(interval);
+		}
+	}, [is_logged_in, current_user_role]);
 
 	function toggle_sidebar() {
 		set_is_sidebar_visible(!is_sidebar_visible);
@@ -444,16 +568,34 @@ function AppContent({
 								<div className="mt-auto border-top border-light-subtle pt-3 px-2 mb-3">
 									<div className="d-flex align-items-center mb-2">
 										<div className="flex-grow-1">
-											<div className="d-flex align-items-center gap-2 mb-1">
-												<i className="bi bi-person-circle fs-5"></i>
-												<span className="text-white fw-semibold small">
-													{current_full_name}
-												</span>
-												<span className="badge bg-light text-dark px-2 py-1 small">
-													{get_role_text(
-														current_user_role
-													)}
-												</span>
+											<div className="d-flex align-items-center justify-content-between gap-2 mb-1">
+												<div className="d-flex gap-2 align-items-center">
+													<i className="bi bi-person-circle fs-5"></i>
+													<span className="text-white fw-semibold small">
+														{current_full_name}
+													</span>
+													<span className="badge bg-light text-dark px-2 py-1 small">
+														{get_role_text(
+															current_user_role
+														)}
+													</span>
+												</div>
+												{/* Notification Bell - Only for admin */}
+												{current_user_role === 'admin' && (
+													<button
+														className="btn btn-secondary text-white rounded-circle position-relative me-1"
+														onClick={toggle_notifications_offcanvas}
+														title="Thông báo"
+													>
+														<i className="bi bi-bell fs-6"></i>
+														{unread_count > 0 && (
+															<span className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+																{unread_count > 99 ? '99+' : unread_count}
+																<span className="visually-hidden">thông báo chưa đọc</span>
+															</span>
+														)}
+													</button>
+												)}
 											</div>
 										</div>
 									</div>
@@ -674,6 +816,139 @@ function AppContent({
 						);
 				}
 			})()}
+
+			{/* Notifications Offcanvas - Only for admin */}
+			{current_user_role === 'admin' && (
+				<div
+					className={`offcanvas offcanvas-end ${is_notifications_offcanvas_visible ? 'show' : ''}`}
+					tabIndex="-1"
+					id="notificationsOffcanvas"
+					aria-labelledby="notificationsOffcanvasLabel"
+					style={{ visibility: is_notifications_offcanvas_visible ? 'visible' : 'hidden' }}
+				>
+					<div className="offcanvas-header">
+						<h5 className="offcanvas-title" id="notificationsOffcanvasLabel">
+							<i className="bi bi-bell me-2"></i>
+							Thông báo
+						</h5>
+						<button
+							type="button"
+							className="btn-close"
+							onClick={toggle_notifications_offcanvas}
+							aria-label="Close"
+						></button>
+					</div>
+					<div className="offcanvas-body p-0">
+						{/* Notification Actions */}
+						<div className="p-3 border-bottom bg-light">
+							<div className="d-flex justify-content-center">
+								<button 
+									type="button" 
+									className="btn btn-sm btn-outline-primary"
+									onClick={handle_mark_all_read}
+									disabled={unread_count === 0}
+								>
+									<i className="fas fa-check-double me-1"></i>
+									Đánh dấu tất cả đã đọc
+								</button>
+							</div>
+						</div>
+
+						{/* Notifications List */}
+						<div className="notification-list" style={{ maxHeight: 'calc(100vh - 200px)', overflowY: 'auto' }}>
+							{!notifications || notifications.length === 0 ? (
+								<div className="text-center py-5">
+									<i className="fas fa-bell-slash fa-3x text-muted mb-3"></i>
+									<h6 className="text-muted">Không có thông báo</h6>
+									<p className="text-muted small">
+										Bạn sẽ nhận được thông báo khi có hoạt động mới trong hệ thống.
+									</p>
+								</div>
+							) : (
+								notifications.map(notification => (
+									<div 
+										key={notification.notification_id}
+										className={`p-3 border-bottom ${
+											!notification.is_read ? 'bg-light border-primary border-2' : ''
+										}`}
+										style={{ cursor: 'pointer' }}
+										onClick={() => {
+											if (!notification.is_read) {
+												handle_notification_read(notification.notification_id);
+											}
+										}}
+										onMouseEnter={(e) => e.target.style.backgroundColor = '#f8f9fa'}
+										onMouseLeave={(e) => e.target.style.backgroundColor = !notification.is_read ? '#f8f9fa' : 'transparent'}
+									>
+										<div className="d-flex align-items-start">
+											<div className="flex-shrink-0 me-3">
+												<div className={`rounded-circle d-flex align-items-center justify-content-center ${
+													notification.type === 'subject' ? 'bg-primary' :
+													notification.type === 'system' ? 'bg-info' :
+													notification.type === 'success' ? 'bg-success' :
+													notification.type === 'warning' ? 'bg-warning' :
+													notification.type === 'error' ? 'bg-danger' : 'bg-secondary'
+												}`} style={{ width: '40px', height: '40px' }}>
+													<i className={`fas ${
+														notification.type === 'subject' ? 'fa-book' :
+														notification.type === 'system' ? 'fa-cog' :
+														notification.type === 'success' ? 'fa-check' :
+														notification.type === 'warning' ? 'fa-exclamation-triangle' :
+														notification.type === 'error' ? 'fa-times' : 'fa-bell'
+													} text-white fa-sm`}></i>
+												</div>
+											</div>
+											<div className="flex-grow-1">
+												<div className="d-flex justify-content-between align-items-start mb-1">
+													<h6 className="mb-0 fw-bold text-dark">
+														{notification.title}
+													</h6>
+													{!notification.is_read && (
+														<div className="bg-primary rounded-circle" 
+															 style={{ width: '8px', height: '8px' }}></div>
+													)}
+												</div>
+												<p className="mb-1 text-muted small">
+													{notification.message}
+												</p>
+												<div className="d-flex justify-content-between align-items-center">
+													<small className="text-muted">
+														<i className="fas fa-clock me-1"></i>
+														{new Date(notification.created_at).toLocaleString('vi-VN', {
+															year: 'numeric',
+															month: '2-digit',
+															day: '2-digit',
+															hour: '2-digit',
+															minute: '2-digit'
+														})}
+													</small>
+													<span className={`badge text-capitalize ${
+														notification.type === 'subject' ? 'bg-primary' :
+														notification.type === 'system' ? 'bg-info' :
+														notification.type === 'success' ? 'bg-success' :
+														notification.type === 'warning' ? 'bg-warning text-dark' :
+														notification.type === 'error' ? 'bg-danger' : 'bg-secondary'
+													}`}>
+														{notification.type}
+													</span>
+												</div>
+											</div>
+										</div>
+									</div>
+								))
+							)}
+						</div>
+					</div>
+				</div>
+			)}
+
+			{/* Offcanvas Backdrop */}
+			{is_notifications_offcanvas_visible && (
+				<div
+					className="offcanvas-backdrop fade show"
+					onClick={toggle_notifications_offcanvas}
+				></div>
+			)}
 		</div>
 	);
 }

@@ -47,7 +47,7 @@ const { authenticate_jwt } = require('../middleware/auth');
  *   "message": "Classes retrieved successfully for exam management"
  * }
  */
-router.get('/get-all-classes', authenticate_jwt, classController.get_all_classes);
+router.get('/get-all-classes', authenticate_jwt, classController.getAllClasses);
 
 /**
  * Get detailed information about a specific class
@@ -96,7 +96,7 @@ router.get('/get-all-classes', authenticate_jwt, classController.get_all_classes
  *   "message": "Class details retrieved successfully"
  * }
  */
-router.get('/class-details/:class_id', authenticate_jwt, classController.get_class_details);
+router.get('/class-details/:class_id', authenticate_jwt, classController.getClassById);
 
 /**
  * Create a new class
@@ -146,7 +146,7 @@ router.get('/class-details/:class_id', authenticate_jwt, classController.get_cla
  *   "message": "Class created successfully for exam management"
  * }
  */
-router.post('/create-class', authenticate_jwt, classController.create_class);
+router.post('/create-class', authenticate_jwt, classController.createClass);
 
 /**
  * Update class information
@@ -183,7 +183,7 @@ router.post('/create-class', authenticate_jwt, classController.create_class);
  *   "message": "Class updated successfully"
  * }
  */
-router.put('/update-class/:class_id', authenticate_jwt, classController.update_class);
+router.put('/update-class/:class_id', authenticate_jwt, classController.updateClass);
 
 /**
  * Get students in a specific class
@@ -227,7 +227,7 @@ router.put('/update-class/:class_id', authenticate_jwt, classController.update_c
  *   "message": "Students in class retrieved for exam management"
  * }
  */
-router.get('/class-students/:class_id', authenticate_jwt, classController.get_class_students);
+router.get('/class-students/:class_id', authenticate_jwt, classController.getClassStudents);
 
 /**
  * Add student to class
@@ -256,7 +256,7 @@ router.get('/class-students/:class_id', authenticate_jwt, classController.get_cl
  *   "message": "Student added to class successfully"
  * }
  */
-router.post('/add-student/:class_id', authenticate_jwt, classController.add_student_to_class);
+router.post('/add-student/:class_id', authenticate_jwt, classController.addStudentToClass);
 
 /**
  * Remove student from class
@@ -282,7 +282,7 @@ router.post('/add-student/:class_id', authenticate_jwt, classController.add_stud
  *   "message": "Student removed from class successfully"
  * }
  */
-router.delete('/remove-student/:class_id/:student_id', authenticate_jwt, classController.remove_student_from_class);
+router.delete('/remove-student/:class_id/:student_id', authenticate_jwt, classController.removeStudentFromClass);
 
 /**
  * Get class exam schedule
@@ -334,7 +334,7 @@ router.delete('/remove-student/:class_id/:student_id', authenticate_jwt, classCo
  *   "message": "Class exam schedule retrieved successfully"
  * }
  */
-router.get('/exam-schedule/:class_id', authenticate_jwt, classController.get_class_exam_schedule);
+router.get('/exam-schedule/:class_id', authenticate_jwt, classController.getClassExamSchedule);
 
 /**
  * Get class statistics
@@ -378,7 +378,7 @@ router.get('/exam-schedule/:class_id', authenticate_jwt, classController.get_cla
  *   "message": "Class statistics retrieved successfully"
  * }
  */
-router.get('/statistics', authenticate_jwt, classController.get_class_statistics);
+router.get('/statistics', authenticate_jwt, classController.getClassStats);
 
 /**
  * Error Handler Middleware for Class Routes

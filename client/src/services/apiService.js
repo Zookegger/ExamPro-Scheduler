@@ -343,18 +343,18 @@ export const create_user = (user_data) =>
  *
  * @example
  * // Get all exams
- * const all_exams = await get_all_exams();
+ * const all_exams = await getAllExams();
  *
  * @example
  * // Get exams for specific subject in date range
- * const filtered_exams = await get_all_exams({
+ * const filtered_exams = await getAllExams({
  *     subject_id: '1',
  *     date_from: '2024-03-01',
  *     date_to: '2024-03-31'
  * });
  */
 
-export const get_all_exams = (filters = {}) => {
+export const getAllExams = (filters = {}) => {
 	const query_params = new URLSearchParams(filters).toString();
 	const endpoint = `/api/exams${query_params ? `?${query_params}` : ""}`;
 	return api_call(endpoint);
@@ -389,3 +389,142 @@ export const delete_subject = (subject_id) =>
 		method: "DELETE",
 	}
 );
+
+// ============================================================================
+// NOTIFICATION MANAGEMENT
+// ============================================================================
+
+/**
+ * Get notifications for the current user
+ * 
+ * Retrieves all notifications for the authenticated user with optional filtering
+ * and pagination. Supports filtering by read status and notification type.
+ * 
+ * @param {Object} [filters={}] - Filter options
+ * @param {boolean} [filters.is_read] - Filter by read status (true/false)
+ * @param {string} [filters.notification_type] - Filter by notification type
+ * @param {number} [filters.page=1] - Page number for pagination
+ * @param {number} [filters.limit=10] - Number of notifications per page
+ * @returns {Promise<Object>} Response containing notifications
+ * @returns {boolean} returns.success - Whether the request was successful
+ * @returns {Array<Object>} returns.notifications - Array of notification objects
+ * @returns {number} returns.unread_count - Count of unread notifications
+ * @returns {number} returns.total_count - Total count of notifications
+ * 
+ * @example
+ * // Get all notifications for current user
+ * const result = await getUserNotifications();
+ * if (result.success) {
+ *     console.log('Notifications:', result.notifications);
+ *     console.log('Unread count:', result.unread_count);
+ * }
+ * 
+ * @example
+ * // Get only unread notifications
+ * const unread = await getUserNotifications({ is_read: false });
+ */
+export const getUserNotifications = (filters = {}) => {
+	const query_params = new URLSearchParams(filters).toString();
+	const endpoint = `/api/notifications${query_params ? `?${query_params}` : ""}`;
+	return api_call(endpoint, { method: "GET" });
+};
+
+/**
+ * Mark specific notifications as read
+ * 
+ * Updates the read status of specified notifications to read. This helps
+ * manage notification count and user experience.
+ * 
+ * @param {Array<number>} notification_ids - Array of notification IDs to mark as read
+ * @returns {Promise<Object>} Response containing update result
+ * @returns {boolean} returns.success - Whether the request was successful
+ * @returns {number} returns.updated_count - Number of notifications updated
+ * 
+ * @example
+ * // Mark specific notifications as read
+ * const result = await markNotificationsAsRead([1, 2, 3]);
+ * if (result.success) {
+ *     console.log(`Marked ${result.updated_count} notifications as read`);
+ * }
+ */
+export const markNotificationsAsRead = (notification_ids) =>
+	api_call("/api/notifications/mark-read", {
+		method: "PUT",
+		body: JSON.stringify({ notification_ids }),
+	}
+);
+
+/**
+ * Mark all notifications as read for current user
+ * 
+ * Bulk operation to mark all user notifications as read. Useful for 
+ * "mark all as read" functionality in notification panels.
+ * 
+ * @returns {Promise<Object>} Response containing update result
+ * @returns {boolean} returns.success - Whether the request was successful
+ * @returns {number} returns.updated_count - Number of notifications updated
+ * 
+ * @example
+ * // Mark all notifications as read
+ * const result = await markAllNotificationsAsRead();
+ * if (result.success) {
+ *     console.log(`Marked ${result.updated_count} notifications as read`);
+ * }
+ */
+export const markAllNotificationsAsRead = () =>
+	api_call("/api/notifications/mark-all-read", {
+		method: "PUT",
+	}
+);
+
+/**
+ * Create a new notification (Admin only)
+ * 
+ * Admin-only endpoint for manually creating notifications. Useful for
+ * system announcements or custom notifications.
+ * 
+ * @requires Admin role authentication
+ * @param {Object} notification_data - Notification data
+ * @param {number} [notification_data.recipient_id] - Target user ID (optional for broadcast)
+ * @param {string} notification_data.title - Notification title
+ * @param {string} notification_data.message - Notification message
+ * @param {string} [notification_data.notification_type='info'] - Notification type
+ * @param {Object} [notification_data.metadata] - Additional metadata
+ * @returns {Promise<Object>} Response containing created notification
+ * 
+ * @example
+ * // Create system announcement
+ * const result = await createNotification({
+ *     title: 'System Maintenance',
+ *     message: 'System will be down for maintenance on Sunday',
+ *     notification_type: 'system'
+ * });
+ */
+export const createNotification = (notification_data) =>
+	api_call("/api/notifications", {
+		method: "POST",
+		body: JSON.stringify(notification_data),
+	}
+);
+
+/**
+ * Delete a notification (Admin or owner only)
+ * 
+ * Removes a notification from the system. Only admins or notification owners
+ * can delete notifications.
+ * 
+ * @param {number} notification_id - ID of notification to delete
+ * @returns {Promise<Object>} Response containing deletion result
+ * @returns {boolean} returns.success - Whether the request was successful
+ * 
+ * @example
+ * // Delete a notification
+ * const result = await deleteNotification(123);
+ * if (result.success) {
+ *     console.log('Notification deleted successfully');
+ * }
+ */
+export const deleteNotification = (notification_id) =>
+	api_call(`/api/notifications/${notification_id}`, {
+		method: "DELETE",
+	});

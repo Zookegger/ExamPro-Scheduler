@@ -23,8 +23,12 @@
 
 import React, { useState, useEffect } from 'react';
 import Breadcrumb from '../../components/Breadcrumb';
-import { add_new_subject, get_all_subjects, update_subject } from '../../services/apiService';
-import { io } from 'socket.io-client';
+import { 
+    add_new_subject, 
+    delete_subject, 
+    get_all_subjects, 
+    update_subject,
+} from '../../services/apiService';
 import useWebsocketConnection from '../../hooks/use_websocket_connection';
 
 function ManageSubjectPage({ current_user, current_user_role }) {
@@ -37,9 +41,7 @@ function ManageSubjectPage({ current_user, current_user_role }) {
     const [show_modal, set_show_modal] = useState(false);
     const [modal_mode, set_modal_mode] = useState('create'); // 'create', 'edit', 'delete'
     const [selected_subject, set_selected_subject] = useState(null);
-    const [notifications, set_notifications] = useState([]);
-    const [show_notification, set_show_notification] = useState(false);
-
+    
     const [form_data, set_form_data] = useState({
         subject_name: '',
         subject_code: '',
@@ -55,22 +57,7 @@ function ManageSubjectPage({ current_user, current_user_role }) {
     const [filter_credit, set_filter_credit] = useState('all'); // 'all', '1', '2', '3', '4', '5'
 
     // ================================================================
-    // WEBSOCKET INTEGRATION
-    // ================================================================
-    const { 
-        connection_status, 
-        is_connected, 
-        emit_event 
-    } = useWebsocketConnection({
-        events: {
-            'subject_table_update': handle_subject_table_update,
-            'admin_notification': handle_admin_notification
-        }
-    });
-
-
-    // ================================================================
-    // EVENT HANDLERS
+    // EVENT HANDLERS (Defined before useWebsocketConnection)
     // ================================================================
     const handle_subject_table_update = (data) => {
         const { action, subject, timestamp } = data;
@@ -94,37 +81,20 @@ function ManageSubjectPage({ current_user, current_user_role }) {
         }
     };
 
-    const handle_admin_notification = (data) => {
-
-    }
-
     // ================================================================
-    // CRUD OPERATIONS WITH WEBSOCKET
+    // WEBSOCKET INTEGRATION
     // ================================================================
-    const handle_create_subject = async () => {
-        try {
-            const result = await add_new_subject(form_data);
-            if (result.success) {
-                // Emit to other admins
-                emit_event('subject_created', {
-                    subject_data: result.data,
-                    admin_info: current_user
-                });
-                
-                // Update local state
-                set_subjects(prev => [...prev, result.data]);
-            }
-        } catch (error) {
-            console.error('Error creating subject:', error);
+    const { emit_event } = useWebsocketConnection({
+        events: {
+            'subject_table_update': handle_subject_table_update
         }
-    };
+    });
 
     // ========================================================================
-    // DATA LOADING - TO BE IMPLEMENTED
+    // DATA LOADING
     // ========================================================================
 
     useEffect(() => {
-        // TODO: Load subjects from API
         load_subjects();
     }, []);
 
@@ -218,24 +188,39 @@ function ManageSubjectPage({ current_user, current_user_role }) {
         
         try {
             if (modal_mode === 'create') {
-                // TODO: Implement create subject API call
                 console.log('Creating subject:', form_data);
                 
                 const result = await add_new_subject(form_data);
                 if (result.success) {
-                    await load_subjects();
+                    // Emit to other admins via WebSocket
+                    emit_event('subject_created', {
+                        subject_data: result.data,
+                        admin_info: current_user
+                    });
+                    
+                    // Update local state (WebSocket will also handle this)
+                    set_subjects(prev => [...prev, result.data]);
+                    
                     handle_modal_close();
                     // Show success notification
                 }
                 
             } else if (modal_mode === 'edit') {
-                // TODO: Implement update subject API call
                 console.log('Updating subject:', selected_subject.subject_id, form_data);
                 
-                // TODO: Replace with actual API call
                 const result = await update_subject(selected_subject.subject_id, form_data);
                 if (result.success) {
-                    await load_subjects(); // Reload subjects list
+                    // Emit to other admins via WebSocket
+                    emit_event('subject_updated', {
+                        subject_data: result.data,
+                        admin_info: current_user
+                    });
+                    
+                    // Update local state (WebSocket will also handle this)
+                    set_subjects(prev => prev.map(s => 
+                        s.subject_id === result.data.subject_id ? result.data : s
+                    ));
+                    
                     handle_modal_close();
                     // Show success notification
                 }
@@ -252,14 +237,21 @@ function ManageSubjectPage({ current_user, current_user_role }) {
             console.log('Deleting subject:', selected_subject.subject_id);
             
             // TODO: Replace with actual API call
-            // const result = await delete_subject(selected_subject.subject_id);
-            // if (result.success) {
-            //     await load_subjects(); // Reload subjects list
-            //     handle_modal_close();
-            //     // Show success notification
-            // }
-            
-            alert('TODO: Implement delete subject API call');
+            const result = await delete_subject(selected_subject.subject_id);
+            if (result.success) {
+                // Emit to other admins via WebSocket
+                emit_event('subject_deleted', {
+                    subject_data: result.data,
+                    admin_info: current_user
+                });
+                
+                // Update local state (WebSocket will also handle this)
+                set_subjects(prev => prev.map(s => 
+                    s.subject_id === result.data.subject_id ? result.data : s
+                ));
+                
+                handle_modal_close();
+            }
         } catch (error) {
             console.error('Delete error:', error);
             alert('Lỗi khi xóa môn học. Vui lòng thử lại.');
@@ -341,6 +333,7 @@ function ManageSubjectPage({ current_user, current_user_role }) {
                             <small className="text-muted">Quản lý danh sách môn học trong hệ thống</small>
                         </div>
                         <div className="col-auto">
+                            {/* Add Subject Button */}
                             <button 
                                 type="button" 
                                 className="btn btn-primary"

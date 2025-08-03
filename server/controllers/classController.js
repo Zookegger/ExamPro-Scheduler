@@ -13,7 +13,7 @@ const { Op } = require('sequelize');
  * Get all classes with student counts and exam statistics
  * Essential for exam planning and room allocation
  */
-const get_all_classes = async (req, res) => {
+const getAllClasses = async (req, res) => {
     try {
         const classes = await Class.findAll({
             include: [
@@ -73,7 +73,7 @@ const get_all_classes = async (req, res) => {
  * Get class details with students and exam schedule
  * Used for detailed exam planning for a specific class
  */
-const get_class_details = async (req, res) => {
+const getClassById = async (req, res) => {
     try {
         const { class_id } = req.params;
 
@@ -137,7 +137,7 @@ const get_class_details = async (req, res) => {
 /**
  * Create a new class for exam management
  */
-const create_class = async (req, res) => {
+const createClass = async (req, res) => {
     try {
         const { 
             class_code, 
@@ -209,7 +209,7 @@ const create_class = async (req, res) => {
 /**
  * Update class information
  */
-const update_class = async (req, res) => {
+const updateClass = async (req, res) => {
     try {
         const { class_id } = req.params;
         const updates = req.body;
@@ -263,7 +263,7 @@ const update_class = async (req, res) => {
 /**
  * Get students in a class (for exam registration purposes)
  */
-const get_class_students = async (req, res) => {
+const getClassStudents = async (req, res) => {
     try {
         const { class_id } = req.params;
 
@@ -304,7 +304,7 @@ const get_class_students = async (req, res) => {
  * Add student to class
  * Useful for managing class enrollment and exam eligibility
  */
-const add_student_to_class = async (req, res) => {
+const addStudentToClass = async (req, res) => {
     try {
         const { class_id } = req.params;
         const { student_id } = req.body;
@@ -406,7 +406,7 @@ const add_student_to_class = async (req, res) => {
  * Remove student from class
  * Useful for managing class transfers and exam eligibility
  */
-const remove_student_from_class = async (req, res) => {
+const removeStudentFromClass = async (req, res) => {
     try {
         const { class_id, student_id } = req.params;
 
@@ -469,7 +469,7 @@ const remove_student_from_class = async (req, res) => {
  * Get class exam schedule
  * Provides a focused view of upcoming exams for a specific class
  */
-const get_class_exam_schedule = async (req, res) => {
+const getClassExamSchedule = async (req, res) => {
     try {
         const { class_id } = req.params;
         const { start_date, end_date } = req.query;
@@ -541,7 +541,7 @@ const get_class_exam_schedule = async (req, res) => {
  * Get system-wide class statistics
  * Useful for admin dashboards and system overview
  */
-const get_class_statistics = async (req, res) => {
+const getClassStats = async (req, res) => {
     try {
         const { academic_year } = req.query;
 
@@ -633,13 +633,13 @@ const get_class_statistics = async (req, res) => {
 };
 
 module.exports = {
-    get_all_classes,
-    get_class_details,
-    create_class,
-    update_class,
-    get_class_students,
-    add_student_to_class,
-    remove_student_from_class,
-    get_class_exam_schedule,
-    get_class_statistics
+    getAllClasses,
+    getClassById,
+    createClass,
+    updateClass,
+    getClassStudents,
+    addStudentToClass,
+    removeStudentFromClass,
+    getClassExamSchedule,
+    getClassStats
 };
