@@ -84,6 +84,20 @@ const Exam = sequelize.define('Exam', {
         allowNull: true,
         comment: 'Reference to the room where exam takes place'
     },
+    class_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        comment: 'Reference to specific class taking the exam (for targeted scheduling)'
+    },
+    grade_level: {
+        type: DataTypes.TINYINT,
+        allowNull: true,
+        validate: {
+            min: 10,
+            max: 12
+        },
+        comment: 'Grade level for the exam (10, 11, 12) - helps with scheduling'
+    },
     method: {
         type: DataTypes.ENUM('essay', 'multiple_choices'),
         allowNull: false,

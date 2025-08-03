@@ -12,19 +12,33 @@ const BCRYPT_SALT_LENGTH = 12; // How strong the password encryption will be
  * of information we want to store about our users.
  * 
  * @property {number} user_id - The unique ID number for each user
+ * @property {string} user_name - The user's unique username for login
  * @property {string} full_name - The user's full name
  * @property {string} email - The user's email address (must be valid format)
  * @property {string} password_hash - The user's password (stored securely as a hash)
  * @property {string} user_role - What type of user: 'student', 'teacher', or 'admin'
+ * @property {number} class_id - Reference to student's class (essential for exam scheduling)
  * @property {boolean} is_active - Whether the user account is active (true) or disabled (false)
  * 
  * @example
- * // How to create a new user in the database:
- * const newUser = await User.create({
- *   full_name: 'John Doe',
- *   email: 'john.doe@example.com',
+ * // How to create a new student user for exam management:
+ * const newStudent = await User.create({
+ *   user_name: 'student001',
+ *   full_name: 'Nguyen Van A',
+ *   email: 'nguyenvana@example.com',
  *   password_hash: 'plainTextPassword', // Don't worry, this will be encrypted automatically
- *   user_role: 'student'
+ *   user_role: 'student',
+ *   class_id: 15 // Reference to the student's class for exam scheduling
+ * });
+ * 
+ * // How to create a teacher (no class_id needed):
+ * const newTeacher = await User.create({
+ *   user_name: 'teacher001',
+ *   full_name: 'Tran Thi B',
+ *   email: 'tranthib@example.com',
+ *   password_hash: 'plainTextPassword',
+ *   user_role: 'teacher'
+ *   // class_id is null for teachers - they can manage multiple classes
  * });
  */
 const User = sequelize.define('User', {
@@ -59,6 +73,11 @@ const User = sequelize.define('User', {
         type: DataTypes.ENUM('student', 'teacher', 'admin'), // Only these three values are allowed
         allowNull: false, // This field cannot be empty
         defaultValue: 'student' // If no role is specified, 'student' is used
+    },
+    class_id: {
+        type: DataTypes.INTEGER, // Reference to the class (for students only)
+        allowNull: true, // Teachers and admins don't need a class
+        comment: 'Reference to student class - essential for exam scheduling and management'
     },
     is_active: {
         type: DataTypes.BOOLEAN, // True or false values only

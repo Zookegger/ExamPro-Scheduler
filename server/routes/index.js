@@ -20,6 +20,7 @@ const router = express.Router();
  * - /api/registrations - Exam registration management
  * - /api/rooms - Classroom and venue management
  * - /api/subjects - Subject and course management
+ * - /api/classes - Class management and student organization
  */
 
 // Import route modules
@@ -30,6 +31,8 @@ const registration_routes = require('./registration_routes');
 const room_routes = require('./room_routes');
 const subject_routes = require('./subject_routes');
 const admin_routes = require('./admin_routes');
+const enrollment_routes = require('./enrollment_routes');
+const class_routes = require('./class_routes');
 
 /**
  * Mount Route Modules
@@ -44,6 +47,7 @@ const admin_routes = require('./admin_routes');
  * /api/registrations/* - Registration management routes
  * /api/rooms/*        - Room management routes
  * /api/subjects/*     - Subject management routes
+ * /api/classes/*      - Class management routes
  */
 
 // User management routes
@@ -63,6 +67,12 @@ router.use('/rooms', room_routes);
 
 // Subject management routes
 router.use('/subjects', subject_routes);
+
+// Class management routes
+router.use('/classes', class_routes);
+
+// Enrollment management routes
+router.use('/enrollments', enrollment_routes);
 
 // Admin routes (development only)
 router.use('/admin', admin_routes);

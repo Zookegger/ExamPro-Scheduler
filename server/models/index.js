@@ -15,6 +15,8 @@ const Registration = require("./registrations");
 const Subject = require("./subjects");
 const Room = require("./rooms");
 const ExamProctor = require("./examProctors");
+const Enrollment = require("./enrollments");
+const Class = require("./classes");
 
 require('dotenv').config(); // Load environment variables from .env file
 
@@ -27,6 +29,36 @@ User.hasMany(Registration, {
 	foreignKey: "student_id",
 	as: "exam_registrations",
     onDelete: "CASCADE",
+    onUpdate: "CASCADE"
+});
+
+User.hasMany(Enrollment, {
+    foreignKey: "student_id",
+    as: "subject_enrollments",
+    onDelete: "CASCADE",
+    onUpdate: "CASCADE"
+});
+
+// Class-User relationship (essential for exam management)
+User.belongsTo(Class, {
+    foreignKey: "class_id",
+    as: "student_class",
+    onDelete: "SET NULL",  // If class is deleted, student remains but loses class reference
+    onUpdate: "CASCADE"
+});
+
+Class.hasMany(User, {
+    foreignKey: "class_id",
+    as: "students",
+    onDelete: "SET NULL",
+    onUpdate: "CASCADE"
+});
+
+// Teacher can be homeroom teacher for a class
+Class.belongsTo(User, {
+    foreignKey: "teacher_id",
+    as: "homeroom_teacher",
+    onDelete: "SET NULL",  // If teacher is deleted, class remains
     onUpdate: "CASCADE"
 });
 
@@ -65,6 +97,21 @@ Exam.belongsTo(Subject, {
     onUpdate: "CASCADE"
 });
 
+// Exam-Class relationship (for targeted class exams)
+Exam.belongsTo(Class, {
+    foreignKey: "class_id",
+    as: "target_class",
+    onDelete: "SET NULL",  // If class is deleted, exam becomes general
+    onUpdate: "CASCADE"
+});
+
+Class.hasMany(Exam, {
+    foreignKey: "class_id", 
+    as: "class_exams",
+    onDelete: "SET NULL",
+    onUpdate: "CASCADE"
+});
+
 Exam.hasMany(Registration, {
     foreignKey: 'exam_id',
     as: 'registrations',
@@ -77,6 +124,14 @@ Subject.hasMany(Exam, {
 	foreignKey: "subject_code",
 	sourceKey: "subject_code",
 	as: "exams",
+    onDelete: "RESTRICT",
+    onUpdate: "CASCADE"
+});
+
+Subject.hasMany(Enrollment, {
+    foreignKey: "subject_code",
+    sourceKey: "subject_code", 
+    as: "enrollments",
     onDelete: "RESTRICT",
     onUpdate: "CASCADE"
 });
@@ -101,6 +156,22 @@ Room.hasMany(Exam, {
     foreignKey: "room_id", 
     as: "exams",
     onDelete: "SET NULL",
+    onUpdate: "CASCADE"
+});
+
+// Enrollment associations
+Enrollment.belongsTo(User, {
+    foreignKey: "student_id",
+    as: "student",
+    onDelete: "CASCADE",
+    onUpdate: "CASCADE"
+});
+
+Enrollment.belongsTo(Subject, {
+    foreignKey: "subject_code",
+    targetKey: "subject_code",
+    as: "subject", 
+    onDelete: "RESTRICT",
     onUpdate: "CASCADE"
 });
 
@@ -129,8 +200,8 @@ async function testConnection() {
 /**
  * Synchronizes database models with the database
  * 
- * This creates tables if they don't exist and updates them if they do.
- * Using alter: true for development to modify existing tables safely.
+ * This creates tables if they don't exist using a safer approach.
+ * Avoids the "too many keys" error by preventing duplicate index creation.
  * 
  * @async
  * @param {boolean} force - Whether to drop tables before creating
@@ -138,27 +209,25 @@ async function testConnection() {
  */
 async function syncDatabase() {
 	try {
-		// Use alter: true for development - modifies existing tables without dropping them
-		// This avoids the "too many keys" error by working with existing schema
+		// Use a safer sync approach to prevent duplicate index creation
+		// Create tables without altering existing structure to avoid key conflicts
 		await sequelize.sync({ 
-			alter: process.env.NODE_ENV === 'development',
-			force: false // Never force drop in production
+			force: false, // Never force drop tables
+			alter: false  // Don't alter existing tables to prevent index duplication
 		});
 		console.log("🗃️  Database tables synchronized successfully.");
-		console.log("✅ Schema updated to match model definitions.");
+		console.log("✅ Schema created to match model definitions.");
 	} catch (error) {
 		console.error(`❌ Error synchronizing database: ${error}`);
 		
-		// If sync fails due to key limit, try without altering
+		// If sync fails, provide helpful debugging info
 		if (error.message.includes('Too many keys specified')) {
-			console.log("🔧 Retrying sync without schema alterations...");
-			try {
-				await sequelize.sync({ force: false, alter: false });
-				console.log("✅ Database sync completed without schema changes.");
-			} catch (retryError) {
-				console.error(`❌ Retry failed: ${retryError}`);
-			}
+			console.error("� Database has too many indexes - this usually indicates duplicate constraints.");
+			console.error("💡 Consider dropping and recreating the database for a clean start.");
 		}
+		
+		// Don't retry automatically to avoid making the problem worse
+		throw error;
 	}
 }
 
@@ -259,6 +328,8 @@ module.exports = {
 		Registration,
 		Room,
 		Subject,
+		Enrollment,
+		Class,
 	},
 	utility: {
 		sequelize

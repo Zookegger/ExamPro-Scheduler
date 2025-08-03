@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { create_user, get_all_users } from "../../services/apiService";
-import AccessDeniedPage from "../AccessDeniedPage";
+import AccessDeniedPage from "../common/AccessDeniedPage";
+import Breadcrumb from "../../components/Breadcrumb";
 
 function ManageUserPage({current_user_role}) {
     const [users, set_users] = useState([]);
@@ -165,22 +166,15 @@ function ManageUserPage({current_user_role}) {
         return <AccessDeniedPage></AccessDeniedPage>;
     }
 
+    const breadcrumb_items = [
+        { label: "Dashboard", link: "/main" },
+        { label: "Quản lý Thi", link: "/management" },
+        { label: "Quản lý Người dùng", icon: "bi-people-fill" }
+    ];
+
     return (
         <div className="container-fluid mt-4">
-            {/* Breadcrumb */}
-            <nav aria-label="breadcrumb">
-                <ol className="breadcrumb">
-                    <li className="breadcrumb-item">
-                        <Link to="/" className="text-decoration-none">
-                            <i className="bi bi-people me-1"></i>
-                            <span>Quản lý</span>
-                        </Link>
-                    </li>
-                    <li className="breadcrumb-item active" aria-current="page">
-                        Người dùng
-                    </li>
-                </ol>
-            </nav>
+            <Breadcrumb items={breadcrumb_items} />
             
             <div className="row">
                 <div className="col-12">

@@ -22,6 +22,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import Breadcrumb from '../../components/Breadcrumb';
 // TODO: Import API functions when ready
 // import { get_all_subjects, create_subject, update_subject, delete_subject } from '../../services/apiService';
 
@@ -296,8 +297,16 @@ function ManageSubjectPage({ current_user_role }) {
     // RENDER UI
     // ========================================================================
     
+    const breadcrumb_items = [
+        { label: "Dashboard", link: "/main" },
+        { label: "Quản lý Thi", link: "/management" },
+        { label: "Quản lý Môn học", icon: "bi-book-fill" }
+    ];
+    
     return (
         <div className="container-fluid py-4">
+            <Breadcrumb items={breadcrumb_items} />
+            
             {/* Page Header */}
             <div className="card mb-4">
                 <div className="card-header">
