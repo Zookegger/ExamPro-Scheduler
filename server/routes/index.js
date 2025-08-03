@@ -33,6 +33,7 @@ const subject_routes = require('./subject_routes');
 const admin_routes = require('./admin_routes');
 const enrollment_routes = require('./enrollment_routes');
 const class_routes = require('./class_routes');
+const notification_routes = require('./notification_routes');
 
 /**
  * Mount Route Modules
@@ -48,6 +49,7 @@ const class_routes = require('./class_routes');
  * /api/rooms/*        - Room management routes
  * /api/subjects/*     - Subject management routes
  * /api/classes/*      - Class management routes
+ * /api/notifications/* - Notification management routes
  */
 
 // User management routes
@@ -73,6 +75,9 @@ router.use('/classes', class_routes);
 
 // Enrollment management routes
 router.use('/enrollments', enrollment_routes);
+
+// Notification management routes
+router.use('/notifications', notification_routes);
 
 // Admin routes (development only)
 router.use('/admin', admin_routes);

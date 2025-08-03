@@ -544,7 +544,7 @@ function AppContent({
 						/>
 						<Route
 							path="/admin/manage-subject"
-							element={<ManageSubjectPage current_user_role={current_user_role} />}
+							element={<ManageSubjectPage current_user={current_user_id} current_user_role={current_user_role} />}
 						/>
 
 						{/* Student Routes */}

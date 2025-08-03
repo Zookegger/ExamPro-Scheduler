@@ -23,10 +23,11 @@
 
 import React, { useState, useEffect } from 'react';
 import Breadcrumb from '../../components/Breadcrumb';
-// TODO: Import API functions when ready
-// import { get_all_subjects, create_subject, update_subject, delete_subject } from '../../services/apiService';
+import { add_new_subject, get_all_subjects, update_subject } from '../../services/apiService';
+import { io } from 'socket.io-client';
+import useWebsocketConnection from '../../hooks/use_websocket_connection';
 
-function ManageSubjectPage({ current_user_role }) {
+function ManageSubjectPage({ current_user, current_user_role }) {
     // ========================================================================
     // STATE MANAGEMENT
     // ========================================================================
@@ -36,7 +37,9 @@ function ManageSubjectPage({ current_user_role }) {
     const [show_modal, set_show_modal] = useState(false);
     const [modal_mode, set_modal_mode] = useState('create'); // 'create', 'edit', 'delete'
     const [selected_subject, set_selected_subject] = useState(null);
-    
+    const [notifications, set_notifications] = useState([]);
+    const [show_notification, set_show_notification] = useState(false);
+
     const [form_data, set_form_data] = useState({
         subject_name: '',
         subject_code: '',
@@ -51,75 +54,93 @@ function ManageSubjectPage({ current_user_role }) {
     const [filter_status, set_filter_status] = useState('all'); // 'all', 'active', 'inactive'
     const [filter_credit, set_filter_credit] = useState('all'); // 'all', '1', '2', '3', '4', '5'
 
-    // ========================================================================
-    // MOCK DATA FOR UI DESIGN
-    // ========================================================================
-    
-    useEffect(() => {
-        // TODO: Replace with actual API call
-        const mock_subjects = [
-            {
-                subject_id: 1,
-                subject_name: 'Toán học',
-                subject_code: 'MATH001',
-                department: 'Khoa Toán',
-                description: 'Toán học cơ bản và nâng cao',
-                credit: 4,
-                is_active: true,
-                created_at: '2024-01-15T10:30:00Z',
-                updated_at: '2024-01-15T10:30:00Z'
-            },
-            {
-                subject_id: 2,
-                subject_name: 'Vật lý',
-                subject_code: 'PHYS001',
-                department: 'Khoa Vật lý',
-                description: 'Vật lý đại cương',
-                credit: 3,
-                is_active: true,
-                created_at: '2024-01-16T09:15:00Z',
-                updated_at: '2024-01-16T09:15:00Z'
-            },
-            {
-                subject_id: 3,
-                subject_name: 'Hóa học',
-                subject_code: 'CHEM001',
-                department: 'Khoa Hóa học',
-                description: 'Hóa học đại cương và hữu cơ',
-                credit: 3,
-                is_active: true,
-                created_at: '2024-01-17T14:20:00Z',
-                updated_at: '2024-01-17T14:20:00Z'
-            },
-            {
-                subject_id: 4,
-                subject_name: 'Sinh học',
-                subject_code: 'BIOL001',
-                department: 'Khoa Sinh học',
-                description: 'Sinh học tổng quát',
-                credit: 2,
-                is_active: false,
-                created_at: '2024-01-18T11:45:00Z',
-                updated_at: '2024-01-20T16:30:00Z'
-            },
-            {
-                subject_id: 5,
-                subject_name: 'Tin học',
-                subject_code: 'COMP001',
-                department: 'Khoa Công nghệ thông tin',
-                description: 'Tin học cơ bản và lập trình',
-                credit: 4,
-                is_active: true,
-                created_at: '2024-01-19T08:30:00Z',
-                updated_at: '2024-01-19T08:30:00Z'
-            }
-        ];
+    // ================================================================
+    // WEBSOCKET INTEGRATION
+    // ================================================================
+    const { 
+        connection_status, 
+        is_connected, 
+        emit_event 
+    } = useWebsocketConnection({
+        events: {
+            'subject_table_update': handle_subject_table_update,
+            'admin_notification': handle_admin_notification
+        }
+    });
+
+
+    // ================================================================
+    // EVENT HANDLERS
+    // ================================================================
+    const handle_subject_table_update = (data) => {
+        const { action, subject, timestamp } = data;
         
-        setTimeout(() => {
-            set_subjects(mock_subjects);
-            set_loading(false);
-        }, 500);
+        switch (action) {
+            case 'create':
+                set_subjects(prev => [...prev, subject]);
+                break;
+            case 'update':
+                set_subjects(prev => prev.map(s => 
+                    s.subject_id === subject.subject_id ? subject : s
+                ));
+                break;
+            case 'delete':
+                set_subjects(prev => prev.filter(s => 
+                    s.subject_id !== subject.subject_id
+                ));
+                break;
+            default:
+                break;
+        }
+    };
+
+    const handle_admin_notification = (data) => {
+
+    }
+
+    // ================================================================
+    // CRUD OPERATIONS WITH WEBSOCKET
+    // ================================================================
+    const handle_create_subject = async () => {
+        try {
+            const result = await add_new_subject(form_data);
+            if (result.success) {
+                // Emit to other admins
+                emit_event('subject_created', {
+                    subject_data: result.data,
+                    admin_info: current_user
+                });
+                
+                // Update local state
+                set_subjects(prev => [...prev, result.data]);
+            }
+        } catch (error) {
+            console.error('Error creating subject:', error);
+        }
+    };
+
+    // ========================================================================
+    // DATA LOADING - TO BE IMPLEMENTED
+    // ========================================================================
+
+    useEffect(() => {
+        // TODO: Load subjects from API
+        load_subjects();
     }, []);
+
+    const load_subjects = async () => {
+        try {
+            set_loading(true);
+            const result = await get_all_subjects();
+            // Extract the subjects array from the response
+            set_subjects(result.subjects || []);
+        } catch (error) {
+            console.error('Error loading subjects:', error);
+            set_subjects([]);
+        } finally {
+            set_loading(false);
+        }
+    };
 
     // ========================================================================
     // UTILITY FUNCTIONS
@@ -197,50 +218,51 @@ function ManageSubjectPage({ current_user_role }) {
         
         try {
             if (modal_mode === 'create') {
-                // TODO: Replace with actual API call
+                // TODO: Implement create subject API call
                 console.log('Creating subject:', form_data);
                 
-                // Mock response
-                const new_subject = {
-                    subject_id: Date.now(),
-                    ...form_data,
-                    created_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString()
-                };
-                
-                set_subjects(prev => [...prev, new_subject]);
-                handle_modal_close();
-                alert('Môn học đã được tạo thành công!'); // TODO: Replace with proper notification
+                const result = await add_new_subject(form_data);
+                if (result.success) {
+                    await load_subjects();
+                    handle_modal_close();
+                    // Show success notification
+                }
                 
             } else if (modal_mode === 'edit') {
-                // TODO: Replace with actual API call
+                // TODO: Implement update subject API call
                 console.log('Updating subject:', selected_subject.subject_id, form_data);
                 
-                set_subjects(prev => prev.map(subject => 
-                    subject.subject_id === selected_subject.subject_id 
-                        ? { ...subject, ...form_data, updated_at: new Date().toISOString() }
-                        : subject
-                ));
-                handle_modal_close();
-                alert('Môn học đã được cập nhật thành công!'); // TODO: Replace with proper notification
+                // TODO: Replace with actual API call
+                const result = await update_subject(selected_subject.subject_id, form_data);
+                if (result.success) {
+                    await load_subjects(); // Reload subjects list
+                    handle_modal_close();
+                    // Show success notification
+                }
             }
         } catch (error) {
             console.error('Form submission error:', error);
-            alert('Lỗi hệ thống. Vui lòng thử lại.'); // TODO: Replace with proper notification
+            alert('Lỗi hệ thống. Vui lòng thử lại.');
         }
     };
     
     const handle_delete_subject = async () => {
         try {
-            // TODO: Replace with actual API call
+            // TODO: Implement delete subject API call
             console.log('Deleting subject:', selected_subject.subject_id);
             
-            set_subjects(prev => prev.filter(subject => subject.subject_id !== selected_subject.subject_id));
-            handle_modal_close();
-            alert('Môn học đã được xóa thành công!'); // TODO: Replace with proper notification
+            // TODO: Replace with actual API call
+            // const result = await delete_subject(selected_subject.subject_id);
+            // if (result.success) {
+            //     await load_subjects(); // Reload subjects list
+            //     handle_modal_close();
+            //     // Show success notification
+            // }
+            
+            alert('TODO: Implement delete subject API call');
         } catch (error) {
             console.error('Delete error:', error);
-            alert('Lỗi khi xóa môn học. Vui lòng thử lại.'); // TODO: Replace with proper notification
+            alert('Lỗi khi xóa môn học. Vui lòng thử lại.');
         }
     };
     

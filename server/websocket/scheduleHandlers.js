@@ -39,7 +39,7 @@ const get_mock_unassigned_proctors = () => [
  * @param {Object} io_stream - Socket.io server instance for broadcasting
  */
 function register_schedule_handlers(socket, io_stream) {
-    console.log('📅 Registering schedule handlers for socket ${socket.id}');
+    console.log(`📅 Registering schedule handlers for socket ${socket.id}`);
 
     // Handle request for live statistics
     socket.on('request_live_stats', () => {

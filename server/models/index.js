@@ -17,6 +17,7 @@ const Room = require("./rooms");
 const ExamProctor = require("./examProctors");
 const Enrollment = require("./enrollments");
 const Class = require("./classes");
+const Notification = require("./notifications");
 
 require('dotenv').config(); // Load environment variables from .env file
 
@@ -44,6 +45,20 @@ User.belongsTo(Class, {
     foreignKey: "class_id",
     as: "student_class",
     onDelete: "SET NULL",  // If class is deleted, student remains but loses class reference
+    onUpdate: "CASCADE"
+});
+
+User.hasMany(Notification, {
+    foreignKey: "user_id",
+    as: "notifications",
+    onDelete: "CASCADE",
+    onUpdate: "CASCADE"
+});
+
+Notification.belongsTo(User, {
+    foreignKey: "user_id",
+    as: "recipient",
+    onDelete: "CASCADE",
     onUpdate: "CASCADE"
 });
 
@@ -200,8 +215,8 @@ async function testConnection() {
 /**
  * Synchronizes database models with the database
  * 
- * This creates tables if they don't exist using a safer approach.
- * Avoids the "too many keys" error by preventing duplicate index creation.
+ * NUCLEAR OPTION: This implements a robust sync strategy that prevents
+ * "Too many keys" errors by using a cleaner approach to database sync.
  * 
  * @async
  * @param {boolean} force - Whether to drop tables before creating
@@ -209,25 +224,73 @@ async function testConnection() {
  */
 async function syncDatabase() {
 	try {
-		// Use a safer sync approach to prevent duplicate index creation
-		// Create tables without altering existing structure to avoid key conflicts
+		console.log("🚀 Starting database synchronization...");
+		
+		// Option 1: Check if we need to force recreate due to index conflicts
+		const should_force_recreate = process.env.DB_FORCE_RECREATE === 'true';
+		
+		if (should_force_recreate) {
+			console.log("💣 FORCE RECREATE mode - dropping all tables...");
+			await sequelize.drop();
+			console.log("🗑️  All tables dropped successfully");
+		}
+		
+		// Use the most conservative sync approach
 		await sequelize.sync({ 
-			force: false, // Never force drop tables
-			alter: false  // Don't alter existing tables to prevent index duplication
+			force: false,     // Never force drop unless explicitly requested above
+			alter: false,     // CRITICAL: Don't alter existing tables to prevent index duplication
+			logging: false    // Reduce noise in logs
 		});
+		
 		console.log("🗃️  Database tables synchronized successfully.");
 		console.log("✅ Schema created to match model definitions.");
+		
+		// Verify critical tables exist
+		const table_names = await sequelize.getQueryInterface().showAllTables();
+		const required_tables = ['users', 'subjects', 'exams', 'rooms', 'classes'];
+		const missing_tables = required_tables.filter(table => 
+			!table_names.includes(table)
+		);
+		
+		if (missing_tables.length > 0) {
+			console.warn(`⚠️  Missing tables: ${missing_tables.join(', ')}`);
+		} else {
+			console.log("✅ All required tables present");
+		}
+		
 	} catch (error) {
 		console.error(`❌ Error synchronizing database: ${error}`);
 		
-		// If sync fails, provide helpful debugging info
+		// Provide specific guidance for common issues
 		if (error.message.includes('Too many keys specified')) {
-			console.error("� Database has too many indexes - this usually indicates duplicate constraints.");
-			console.error("💡 Consider dropping and recreating the database for a clean start.");
+			console.error("🔥 INDEX OVERFLOW DETECTED!");
+			console.error("💡 SOLUTIONS:");
+			console.error("   1. Set DB_FORCE_RECREATE=true in your .env file");
+			console.error("   2. Or manually drop the database and restart");
+			console.error("   3. Command: DROP DATABASE exam_scheduler_db; (then restart server)");
 		}
 		
-		// Don't retry automatically to avoid making the problem worse
-		throw error;
+		if (error.message.includes('ER_DUP_KEY')) {
+			console.error("🔑 DUPLICATE KEY ERROR - Indexes already exist");
+			console.error("💡 This is likely safe to ignore if tables are working");
+		}
+		
+		// In development, we can be more aggressive about recovery
+		if (process.env.NODE_ENV === 'development' && error.message.includes('Too many keys')) {
+			console.error("🛠️  ATTEMPTING AUTOMATIC RECOVERY...");
+			try {
+				await sequelize.drop();
+				console.log("🗑️  Dropped all tables for clean restart");
+				await sequelize.sync({ force: false, alter: false });
+				console.log("✅ Database recovered successfully");
+				return; // Exit successfully
+			} catch (recovery_error) {
+				console.error("❌ Recovery failed:", recovery_error.message);
+			}
+		}
+		
+		// Don't kill the server - let it continue with existing schema
+		console.error("⚠️  Continuing with existing database schema...");
 	}
 }
 
@@ -290,6 +353,38 @@ async function create_default_admin_user() {
 	}
 }
 
+/**
+ * Nuclear option: Clean reset of database when indexes get messed up
+ * 
+ * This function drops and recreates the entire database schema.
+ * Use this when you get "Too many keys" errors that won't go away.
+ * 
+ * @async
+ * @returns {Promise<void>}
+ */
+async function nuclear_reset_database() {
+	try {
+		console.log("💣 NUCLEAR RESET: Dropping entire database...");
+		
+		// Drop all tables
+		await sequelize.drop();
+		console.log("🗑️  All tables dropped");
+		
+		// Recreate tables from scratch
+		await sequelize.sync({ force: false });
+		console.log("🏗️  Tables recreated from models");
+		
+		// Recreate default admin
+		await create_default_admin_user();
+		
+		console.log("✅ Nuclear reset completed successfully");
+		
+	} catch (error) {
+		console.error("❌ Nuclear reset failed:", error);
+		throw error;
+	}
+}
+
 // =============================================
 // Add scopes for common queries
 // =============================================
@@ -330,6 +425,7 @@ module.exports = {
 		Subject,
 		Enrollment,
 		Class,
+		Notification,
 	},
 	utility: {
 		sequelize
@@ -338,6 +434,7 @@ module.exports = {
 		testConnection,
 		syncDatabase,
 		create_database_if_not_exists,
-		create_default_admin_user
+		create_default_admin_user,
+		nuclear_reset_database
 	}
 };
