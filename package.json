@@ -9,7 +9,7 @@
     "server": "nodemon server/app.js",
     "dev": "concurrently \"npm run server\" \"npm run client\"",
     "install_client": "cd client && npm install",    
-    "install_server": "npm install",
+    "install_server": "cd server && npm install",
     "setup": "npm run install_server && npm run install_client",
     "reset-db": "node reset-database.js",
     "fix-indexes": "DB_FORCE_RECREATE=true npm run server"

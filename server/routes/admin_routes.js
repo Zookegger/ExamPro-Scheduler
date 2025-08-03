@@ -225,6 +225,8 @@ diagnose_router.get('/table-status', async (req, res, next) => {
  * }
  */
 diagnose_router.delete('/clear-test-data', async (req, res, next) => {
+    const transaction = await db.sequelize.transaction();
+    
     try {
         console.log('🗑️ Starting test data cleanup...');
         
@@ -236,9 +238,11 @@ diagnose_router.delete('/clear-test-data', async (req, res, next) => {
                 subject_code: {
                     [Sequelize.Op.like]: 'TEST_%'
                 }
-            }
+            },
+            transaction
         });
         deletedCounts.subjects = deletedSubjects;
+        
         const deletedUsers = await db.models.User.destroy({
             where: {
                 [Sequelize.Op.or]: [
@@ -246,11 +250,13 @@ diagnose_router.delete('/clear-test-data', async (req, res, next) => {
                     { email: { [Sequelize.Op.like]: '%demo%' } },
                     { full_name: { [Sequelize.Op.like]: 'Test %' } }
                 ]
-            }
+            },
+            transaction
         });
         deletedCounts.users = deletedUsers;
         
-        console.log(`✅ Test data cleanup completed:`, deletedCounts);
+        await transaction.commit();
+        console.log(`✅ Test data cleanup completed with transaction:`, deletedCounts);
         
         res.json({
             success: true,
@@ -259,7 +265,8 @@ diagnose_router.delete('/clear-test-data', async (req, res, next) => {
             timestamp: new Date().toISOString()
         });
     } catch (error) {
-        console.error('❌ Test data cleanup failed:', error);
+        await transaction.rollback();
+        console.error('❌ Test data cleanup failed, transaction rolled back:', error);
         // Pass error to Express error handler middleware
         next(error);
     }
@@ -464,10 +471,13 @@ const account_router = express.Router();
  * }
  */
 account_router.post('/create-new-account', authenticate_jwt, require_admin_role, async (req, res, next) => {
+    const transaction = await db.sequelize.transaction();
+    
     try {
         const new_user_data = req.body;
 
         if (!new_user_data || !new_user_data.full_name || !new_user_data.password || !new_user_data.user_role || !new_user_data.user_name) {
+            await transaction.rollback();
             return res.status(400).json({
                 success: false,
                 message: "1 hoặc nhiều trường dữ liệu không hợp lệ hoặc thiếu"
@@ -481,7 +491,10 @@ account_router.post('/create-new-account', authenticate_jwt, require_admin_role,
 			full_name: new_user_data.full_name,
 			user_role: new_user_data.user_role,
 			is_active: new_user_data.is_active ?? true
-        });
+        }, { transaction });
+
+        await transaction.commit();
+        console.log(`✅ User "${new_user.full_name}" created successfully with transaction`);
 
         return res.json({
             success: true,
@@ -497,7 +510,8 @@ account_router.post('/create-new-account', authenticate_jwt, require_admin_role,
         });
 
     } catch (error) {
-        console.error('Create user error:', error);
+        await transaction.rollback();
+        console.error('❌ Create user failed, transaction rolled back:', error);
         
         // Handle unique constraint violations
         if (error.name === 'SequelizeUniqueConstraintError') {
@@ -585,12 +599,15 @@ account_router.post('/create-new-account', authenticate_jwt, require_admin_role,
  * }
  */
 account_router.post('/edit-account', authenticate_jwt, require_admin_role, async (req, res, next) => {
+    const transaction = await db.sequelize.transaction();
+    
     try {
         const { user_id } = req.params;
         const updates = req.body;
 
         // Basic validation
         if (!user_id) {
+            await transaction.rollback();
             return res.status(400).json({
                 success: false,
                 message: 'User ID is required'
@@ -600,10 +617,12 @@ account_router.post('/edit-account', authenticate_jwt, require_admin_role, async
         // Find and update user
         const [updated_rows] = await db.models.User.update(updates, {
             where: { user_id: user_id },
-            returning: true
+            returning: true,
+            transaction
         });
 
         if (updated_rows === 0) {
+            await transaction.rollback();
             return res.status(404).json({
                 success: false,
                 message: 'Không tìm thấy người dùng'
@@ -612,8 +631,12 @@ account_router.post('/edit-account', authenticate_jwt, require_admin_role, async
 
         // Get updated user data (excluding password)
         const updated_user = await db.models.User.findByPk(user_id, {
-            attributes: { exclude: ['password_hash'] }
+            attributes: { exclude: ['password_hash'] },
+            transaction
         });
+
+        await transaction.commit();
+        console.log(`✅ User "${updated_user.full_name}" updated successfully with transaction`);
 
         res.json({
             success: true,

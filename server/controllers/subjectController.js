@@ -95,8 +95,11 @@ async function getAllSubjects(req, res, next) {
 }
 
 async function addNewSubject(req, res, next) {
+    const transaction = await db.sequelize.transaction();
+    
     try {
         if (req.user.user_role !== ADMIN_ROLE) {
+            await transaction.rollback();
             return res.status(403).json({
                 success: false,
                 message: ERROR_MESSAGES.PERMISSION_DENIED
@@ -107,6 +110,7 @@ async function addNewSubject(req, res, next) {
         const validation = validateSubjectData(newSubjectData);
         
         if (!validation.isValid) {
+            await transaction.rollback();
             return res.status(400).json({
                 success: false,
                 message: validation.message
@@ -119,9 +123,12 @@ async function addNewSubject(req, res, next) {
             department: newSubjectData.department,
             description: newSubjectData.description || null,
             is_active: newSubjectData.is_active ?? true,
-        });
+        }, { transaction });
 
         await notifyAdminsAboutSubject('created', newSubject, req.user);
+
+        await transaction.commit();
+        console.log(`✅ Subject "${newSubject.subject_name}" created successfully with transaction`);
 
         return res.status(201).json({
             success: true,
@@ -130,7 +137,8 @@ async function addNewSubject(req, res, next) {
         });
 
     } catch (error) {
-        console.error('❌ Create subject failed:', error);
+        await transaction.rollback();
+        console.error('❌ Create subject failed, transaction rolled back:', error);
         const handledResponse = handleDatabaseError(error, res);
         if (handledResponse) return handledResponse;
         next(error);
@@ -138,8 +146,11 @@ async function addNewSubject(req, res, next) {
 }
 
 async function updateSubject(req, res, next) {
+    const transaction = await db.sequelize.transaction();
+    
     try {
         if (req.user.user_role !== ADMIN_ROLE) {
+            await transaction.rollback();
             return res.status(403).json({
                 success: false,
                 message: ERROR_MESSAGES.PERMISSION_DENIED
@@ -151,14 +162,16 @@ async function updateSubject(req, res, next) {
         
         const validation = validateSubjectData(newSubjectData);
         if (!validation.isValid) {
+            await transaction.rollback();
             return res.status(400).json({
                 success: false,
                 message: validation.message
             });
         }
 
-        const oldSubject = await db.models.Subject.findByPk(subjectId);
+        const oldSubject = await db.models.Subject.findByPk(subjectId, { transaction });
         if (!oldSubject) {
+            await transaction.rollback();
             return res.status(404).json({
                 success: false,
                 message: ERROR_MESSAGES.SUBJECT_NOT_FOUND
@@ -171,6 +184,7 @@ async function updateSubject(req, res, next) {
             oldSubject.department === newSubjectData.department &&
             oldSubject.description === newSubjectData.description &&
             oldSubject.is_active === (newSubjectData.is_active ?? true)) {
+            await transaction.rollback();
             return res.status(400).json({
                 success: false,
                 message: ERROR_MESSAGES.NO_CHANGES
@@ -184,18 +198,23 @@ async function updateSubject(req, res, next) {
             description: newSubjectData.description || null,
             is_active: newSubjectData.is_active ?? true,
         }, {
-            where: { subject_id: subjectId }
+            where: { subject_id: subjectId },
+            transaction
         });
 
         if (updatedRows === 0) {
+            await transaction.rollback();
             return res.status(400).json({
                 success: false,
                 message: "Không thể cập nhật môn học"
             });
         }
 
-        const updatedSubject = await db.models.Subject.findByPk(subjectId);
+        const updatedSubject = await db.models.Subject.findByPk(subjectId, { transaction });
         await notifyAdminsAboutSubject('updated', updatedSubject, req.user);
+
+        await transaction.commit();
+        console.log(`✅ Subject "${updatedSubject.subject_name}" updated successfully with transaction`);
 
         return res.status(200).json({
             success: true,
@@ -204,7 +223,8 @@ async function updateSubject(req, res, next) {
         });
 
     } catch (error) {
-        console.error('❌ Update subject failed:', error);
+        await transaction.rollback();
+        console.error('❌ Update subject failed, transaction rolled back:', error);
         const handledResponse = handleDatabaseError(error, res);
         if (handledResponse) return handledResponse;
         next(error);
@@ -212,8 +232,11 @@ async function updateSubject(req, res, next) {
 }
 
 async function deleteSubject(req, res, next) {
+    const transaction = await db.sequelize.transaction();
+    
     try {
         if (req.user.user_role !== ADMIN_ROLE) {
+            await transaction.rollback();
             return res.status(403).json({
                 success: false,
                 message: ERROR_MESSAGES.PERMISSION_DENIED
@@ -221,17 +244,21 @@ async function deleteSubject(req, res, next) {
         }
 
         const subjectId = req.params.subject_id;
-        const subjectToDelete = await db.models.Subject.findByPk(subjectId);
+        const subjectToDelete = await db.models.Subject.findByPk(subjectId, { transaction });
         
         if (!subjectToDelete) {
+            await transaction.rollback();
             return res.status(404).json({
                 success: false,
                 message: ERROR_MESSAGES.SUBJECT_NOT_FOUND
             });
         }
 
-        await subjectToDelete.destroy();
+        await subjectToDelete.destroy({ transaction });
         await notifyAdminsAboutSubject('deleted', subjectToDelete, req.user);
+
+        await transaction.commit();
+        console.log(`✅ Subject "${subjectToDelete.subject_name}" deleted successfully with transaction`);
 
         return res.status(200).json({
             success: true,
@@ -243,7 +270,8 @@ async function deleteSubject(req, res, next) {
         });
 
     } catch (error) {
-        console.error('❌ Delete subject failed:', error);
+        await transaction.rollback();
+        console.error('❌ Delete subject failed, transaction rolled back:', error);
         const handledResponse = handleDatabaseError(error, res);
         if (handledResponse) return handledResponse;
         next(error);

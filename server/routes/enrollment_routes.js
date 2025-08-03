@@ -56,8 +56,11 @@ router.get('/student/:student_id', authenticate_jwt, async (req, res, next) => {
  * @access Admin only
  */
 router.post('/enroll', authenticate_jwt, async (req, res, next) => {
+    const transaction = await db.sequelize.transaction();
+    
     try {
         if (req.user.user_role !== 'admin') {
+            await transaction.rollback();
             return res.status(403).json({
                 success: false,
                 message: 'Chỉ quản trị viên mới có thể đăng ký môn học cho học sinh'
@@ -68,6 +71,7 @@ router.post('/enroll', authenticate_jwt, async (req, res, next) => {
 
         // Validate required fields
         if (!student_id || !subject_code || !semester) {
+            await transaction.rollback();
             return res.status(400).json({
                 success: false,
                 message: 'Thiếu thông tin: student_id, subject_code, semester'
@@ -76,10 +80,12 @@ router.post('/enroll', authenticate_jwt, async (req, res, next) => {
 
         // Check if student exists
         const student = await db.models.User.findOne({
-            where: { user_id: student_id, user_role: 'student' }
+            where: { user_id: student_id, user_role: 'student' },
+            transaction
         });
 
         if (!student) {
+            await transaction.rollback();
             return res.status(404).json({
                 success: false,
                 message: 'Không tìm thấy học sinh'
@@ -88,10 +94,12 @@ router.post('/enroll', authenticate_jwt, async (req, res, next) => {
 
         // Check if subject exists
         const subject = await db.models.Subject.findOne({
-            where: { subject_code }
+            where: { subject_code },
+            transaction
         });
 
         if (!subject) {
+            await transaction.rollback();
             return res.status(404).json({
                 success: false,
                 message: 'Không tìm thấy môn học'
@@ -100,10 +108,12 @@ router.post('/enroll', authenticate_jwt, async (req, res, next) => {
 
         // Check for existing enrollment
         const existing_enrollment = await db.models.Enrollment.findOne({
-            where: { student_id, subject_code, semester }
+            where: { student_id, subject_code, semester },
+            transaction
         });
 
         if (existing_enrollment) {
+            await transaction.rollback();
             return res.status(400).json({
                 success: false,
                 message: 'Học sinh đã đăng ký môn học này trong kỳ học này'
@@ -116,7 +126,10 @@ router.post('/enroll', authenticate_jwt, async (req, res, next) => {
             subject_code,
             semester,
             status: 'enrolled'
-        });
+        }, { transaction });
+
+        await transaction.commit();
+        console.log(`✅ Student ${student.full_name} enrolled in ${subject.subject_name} successfully with transaction`);
 
         res.status(201).json({
             success: true,
@@ -125,6 +138,8 @@ router.post('/enroll', authenticate_jwt, async (req, res, next) => {
         });
 
     } catch (error) {
+        await transaction.rollback();
+        console.error('❌ Enrollment creation failed, transaction rolled back:', error);
         next(error);
     }
 });

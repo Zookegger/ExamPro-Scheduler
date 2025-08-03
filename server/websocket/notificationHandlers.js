@@ -13,7 +13,8 @@
  * - Socket.io rooms enable efficient targeted messaging
  * - Automatic cleanup on disconnect
  */
-const { models } = require("../models");
+const { models, utility } = require("../models");
+const { sequelize } = utility;
 const { Notification } = models;
 
 // Constants for error messages and events
@@ -71,8 +72,13 @@ class NotificationHandler {
 
 	setupAckHandler(socket) {
 		socket.on("acknowledge_notification", async (notification_id) => {
+			const transaction = await sequelize.transaction();
+			
 			try {
-				if (!this.validateUser(socket)) return;
+				if (!this.validateUser(socket)) {
+					await transaction.rollback();
+					return;
+				}
 
 				const updated = await Notification.update(
 					{ is_read: true },
@@ -81,12 +87,14 @@ class NotificationHandler {
 							notification_id,
 							user_id: socket.user_id,
 						},
+						transaction
 					}
 				);
 
 				if (updated[0] > 0) {
+					await transaction.commit();
 					console.log(
-						`✅ Notification ${notification_id} acknowledged`
+						`✅ Notification ${notification_id} acknowledged with transaction`
 					);
 					socket.emit(NOTIFICATION_EVENTS.ACKNOWLEDGED, {
 						success: true,
@@ -94,9 +102,11 @@ class NotificationHandler {
 					});
 					this.updateUnreadCount(socket, socket.user_id);
 				} else {
+					await transaction.rollback();
 					this.sendError(socket, ERROR_MESSAGES.NOT_FOUND);
 				}
 			} catch (error) {
+				await transaction.rollback();
 				this.handleError(socket, error, "acknowledging notification");
 			}
 		});

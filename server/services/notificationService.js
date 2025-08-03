@@ -233,6 +233,8 @@ const bulkNotify = async (user_ids, resource_type, action, resource_data, option
  * @returns {Promise<number>} Number of notifications sent
  */
 const createSystemAnnouncement = async (title, message, type = 'system', target_roles = ['admin', 'teacher', 'student']) => {
+    const transaction = await models.sequelize.transaction();
+    
     try {
         let total_notifications = 0;
         
@@ -241,27 +243,33 @@ const createSystemAnnouncement = async (title, message, type = 'system', target_
                 where: { 
                     user_role: role, 
                     is_active: true 
-                }
+                },
+                transaction
             });
             
-            for (const user of users) {
-                await Notification.create({
-                    user_id: user.user_id,
-                    title: title,
-                    message: message,
-                    type: type,
-                    related_id: null,
-                    related_type: 'system'
-                });
-                total_notifications++;
+            // Create notifications in bulk for better performance
+            const notifications_to_create = users.map(user => ({
+                user_id: user.user_id,
+                title: title,
+                message: message,
+                type: type,
+                related_id: null,
+                related_type: 'system'
+            }));
+            
+            if (notifications_to_create.length > 0) {
+                await Notification.bulkCreate(notifications_to_create, { transaction });
+                total_notifications += notifications_to_create.length;
             }
         }
         
-        console.log(`📢 Created system announcement for ${total_notifications} users`);
+        await transaction.commit();
+        console.log(`📢 Created system announcement for ${total_notifications} users with transaction`);
         return total_notifications;
         
     } catch (error) {
-        console.error('❌ Error creating system announcement:', error);
+        await transaction.rollback();
+        console.error('❌ Error creating system announcement, transaction rolled back:', error);
         throw error;
     }
 };
@@ -272,6 +280,8 @@ const createSystemAnnouncement = async (title, message, type = 'system', target_
  * @returns {Promise<number>} Number of notifications deleted
  */
 const cleanupOldNotifications = async (days_old = 30) => {
+    const transaction = await sequelize.transaction();
+    
     try {
         const cutoff_date = new Date();
         cutoff_date.setDate(cutoff_date.getDate() - days_old);
@@ -282,14 +292,17 @@ const cleanupOldNotifications = async (days_old = 30) => {
                 created_at: {
                     [require('sequelize').Op.lt]: cutoff_date
                 }
-            }
+            },
+            transaction
         });
         
-        console.log(`🧹 Cleaned up ${deleted_count} old notifications`);
+        await transaction.commit();
+        console.log(`🧹 Cleaned up ${deleted_count} old notifications with transaction`);
         return deleted_count;
         
     } catch (error) {
-        console.error('❌ Error cleaning up notifications:', error);
+        await transaction.rollback();
+        console.error('❌ Error cleaning up notifications, transaction rolled back:', error);
         throw error;
     }
 };

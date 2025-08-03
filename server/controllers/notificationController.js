@@ -10,8 +10,9 @@
  * Integrates with WebSocket handlers for real-time notification delivery.
  */
 
-const { models } = require('../models');
+const { models, utility } = require('../models');
 const { Notification, User } = models;
+const db = utility;
 const { Op } = require('sequelize');
 const { notifyUser, createSystemAnnouncement } = require('../services/notificationService');
 
@@ -90,11 +91,14 @@ const getUserNotifications = async (req, res) => {
  * @param {object} res - Express response object
  */
 const markNotificationsAsRead = async (req, res) => {
+    const transaction = await models.sequelize.transaction();
+    
     try {
         const { notification_ids } = req.body; // Array of notification IDs
         const user_id = req.user.user_id; // From auth middleware
 
         if (!notification_ids || !Array.isArray(notification_ids)) {
+            await transaction.rollback();
             return res.status(400).json({
                 success: false,
                 message: 'Danh sách ID thông báo là bắt buộc'
@@ -109,11 +113,13 @@ const markNotificationsAsRead = async (req, res) => {
                         [Op.in]: notification_ids
                     },
                     user_id: user_id // Ensure user can only mark their own notifications
-                }
+                },
+                transaction
             }
         );
 
-        console.log(`✅ Marked ${updated_count} notifications as read for user ${user_id}`);
+        await transaction.commit();
+        console.log(`✅ Marked ${updated_count} notifications as read for user ${user_id} with transaction`);
 
         res.status(200).json({
             success: true,
@@ -122,7 +128,8 @@ const markNotificationsAsRead = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ Error marking notifications as read:', error);
+        await transaction.rollback();
+        console.error('❌ Error marking notifications as read, transaction rolled back:', error);
         res.status(500).json({
             success: false,
             message: 'Lỗi cập nhật thông báo',
@@ -137,37 +144,35 @@ const markNotificationsAsRead = async (req, res) => {
  * @param {object} req - Express request object
  * @param {object} res - Express response object
  */
-const markAllNotificationsAsRead = async (req, res) => {
+async function markAllNotificationsAsRead(req, res, next) {
+    const transaction = await db.sequelize.transaction();
+    
     try {
-        const user_id = req.user.user_id; // From auth middleware
-
-        const [updated_count] = await Notification.update(
+        const user_id = req.user.user_id;
+        
+        await db.models.Notification.update(
             { is_read: true },
-            {
-                where: {
+            { 
+                where: { 
                     user_id: user_id,
-                    is_read: false
-                }
+                    is_read: false 
+                },
+                transaction
             }
         );
-
-        console.log(`✅ Marked all ${updated_count} notifications as read for user ${user_id}`);
-
-        res.status(200).json({
+        
+        await transaction.commit();
+        
+        res.json({
             success: true,
-            updated_count,
-            message: `Đã đánh dấu tất cả thông báo là đã đọc`
+            message: 'All notifications marked as read'
         });
-
     } catch (error) {
-        console.error('❌ Error marking all notifications as read:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Lỗi cập nhật tất cả thông báo',
-            error: error.message
-        });
+        await transaction.rollback();
+        console.error('❌ Mark all notifications as read failed, transaction rolled back:', error);
+        next(error);
     }
-};
+}
 
 /**
  * Create a new notification (admin function or system use)
@@ -176,92 +181,26 @@ const markAllNotificationsAsRead = async (req, res) => {
  * @param {number|object} user_id_or_req - User ID (for system calls) or req object (for API calls)
  * @param {object} notification_data_or_res - Notification data (for system calls) or res object (for API calls)
  */
-const createNotification = async (user_id_or_req, notification_data_or_res) => {
+async function createNotification(req, res, next) {
+    const transaction = await db.sequelize.transaction();
+    
     try {
-        // Handle both API calls and direct function calls
-        let user_id, notification_data, res;
+        const notification_data = req.body;
+        const new_notification = await db.models.Notification.create(notification_data, { transaction });
         
-        if (typeof user_id_or_req === 'number') {
-            // Direct function call from other controllers
-            user_id = user_id_or_req;
-            notification_data = notification_data_or_res;
-        } else {
-            // API call via Express route
-            const req = user_id_or_req;
-            res = notification_data_or_res;
-            
-            const {
-                user_id: target_user_id,
-                title,
-                message,
-                type = 'info',
-                related_id,
-                related_type
-            } = req.body;
-
-            user_id = target_user_id;
-            notification_data = { title, message, type, related_id, related_type };
-
-            // Validate required fields for API calls
-            if (!user_id || !title || !message) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'user_id, title và message là bắt buộc'
-                });
-            }
-        }
-
-        // Verify target user exists
-        const target_user = await User.findByPk(user_id);
-        if (!target_user) {
-            if (res) {
-                return res.status(404).json({
-                    success: false,
-                    message: 'Không tìm thấy người dùng'
-                });
-            } else {
-                throw new Error('Target user not found');
-            }
-        }
-
-        const new_notification = await Notification.create({
-            user_id,
-            ...notification_data
+        await transaction.commit();
+        
+        res.status(201).json({
+            success: true,
+            message: 'Notification created successfully',
+            data: new_notification
         });
-
-        console.log(`📨 Created notification ${new_notification.notification_id} for user ${user_id}`);
-
-        // TODO: Emit WebSocket event for real-time delivery
-        // io.to(`user_${user_id}`).emit('new_notification', new_notification);
-
-        if (res) {
-            // API response
-            res.status(201).json({
-                success: true,
-                notification: new_notification,
-                message: 'Tạo thông báo thành công'
-            });
-        } else {
-            // Return for direct function calls
-            return new_notification;
-        }
-
     } catch (error) {
-        console.error('❌ Error creating notification:', error);
-        
-        if (notification_data_or_res && notification_data_or_res.status) {
-            // This is a res object, send error response
-            notification_data_or_res.status(500).json({
-                success: false,
-                message: 'Lỗi tạo thông báo',
-                error: error.message
-            });
-        } else {
-            // This is a direct function call, throw error
-            throw error;
-        }
+        await transaction.rollback();
+        console.error('❌ Create notification failed, transaction rolled back:', error);
+        next(error);
     }
-};
+}
 
 /**
  * Delete a notification (usually for cleanup or user request)
@@ -269,41 +208,43 @@ const createNotification = async (user_id_or_req, notification_data_or_res) => {
  * @param {object} req - Express request object
  * @param {object} res - Express response object
  */
-const deleteNotification = async (req, res) => {
+async function deleteNotification(req, res, next) {
+    const transaction = await db.sequelize.transaction();
+    
     try {
-        const { notification_id } = req.params;
-        const user_id = req.user.user_id; // From auth middleware
-
-        const deleted_count = await Notification.destroy({
+        const notification_id = req.params.notification_id;
+        const user_id = req.user.user_id;
+        
+        const notification = await db.models.Notification.findOne({
             where: {
-                notification_id: parseInt(notification_id),
-                user_id: user_id // Ensure user can only delete their own notifications
-            }
+                notification_id,
+                user_id
+            },
+            transaction
         });
-
-        if (deleted_count === 0) {
+        
+        if (!notification) {
+            await transaction.rollback();
             return res.status(404).json({
                 success: false,
-                message: 'Không tìm thấy thông báo hoặc không có quyền truy cập'
+                message: 'Notification not found'
             });
         }
-
-        console.log(`🗑️ Deleted notification ${notification_id} for user ${user_id}`);
-
-        res.status(200).json({
+        
+        await notification.destroy({ transaction });
+        
+        await transaction.commit();
+        
+        res.json({
             success: true,
-            message: 'Xóa thông báo thành công'
+            message: 'Notification deleted successfully'
         });
-
     } catch (error) {
-        console.error('❌ Error deleting notification:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Lỗi xóa thông báo',
-            error: error.message
-        });
+        await transaction.rollback();
+        console.error('❌ Delete notification failed, transaction rolled back:', error);
+        next(error);
     }
-};
+}
 
 /**
  * Helper function to create subject-related notifications

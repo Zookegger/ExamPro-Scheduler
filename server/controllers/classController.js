@@ -1,4 +1,4 @@
-const { models } = require('../models/index');
+const { models, sequelize } = require('../models/index');
 const { Class, User, Exam } = models;
 const { Op } = require('sequelize');
 
@@ -138,6 +138,8 @@ const getClassById = async (req, res) => {
  * Create a new class for exam management
  */
 const createClass = async (req, res) => {
+    const transaction = await models.sequelize.transaction();
+    
     try {
         const { 
             class_code, 
@@ -150,6 +152,7 @@ const createClass = async (req, res) => {
 
         // Validate required fields
         if (!class_code || !class_name || !academic_year || !grade_level) {
+            await transaction.rollback();
             return res.status(400).json({
                 success: false,
                 message: 'Missing required fields: class_code, class_name, academic_year, grade_level'
@@ -163,10 +166,12 @@ const createClass = async (req, res) => {
                     user_id: teacher_id, 
                     user_role: 'teacher', 
                     is_active: true 
-                }
+                },
+                transaction
             });
             
             if (!teacher) {
+                await transaction.rollback();
                 return res.status(400).json({
                     success: false,
                     message: 'Invalid teacher ID or teacher not active'
@@ -181,7 +186,10 @@ const createClass = async (req, res) => {
             grade_level,
             teacher_id: teacher_id || null,
             max_students: max_students || 35
-        });
+        }, { transaction });
+
+        await transaction.commit();
+        console.log(`✅ Class "${new_class.class_name}" created successfully with transaction`);
 
         res.status(201).json({
             success: true,
@@ -189,7 +197,8 @@ const createClass = async (req, res) => {
             message: 'Class created successfully for exam management'
         });
     } catch (error) {
-        console.error('Error creating class:', error);
+        await transaction.rollback();
+        console.error('❌ Create class failed, transaction rolled back:', error);
         
         if (error.name === 'SequelizeUniqueConstraintError') {
             return res.status(400).json({
@@ -210,6 +219,8 @@ const createClass = async (req, res) => {
  * Update class information
  */
 const updateClass = async (req, res) => {
+    const transaction = await models.sequelize.transaction();
+    
     try {
         const { class_id } = req.params;
         const updates = req.body;
@@ -221,10 +232,12 @@ const updateClass = async (req, res) => {
                     user_id: updates.teacher_id, 
                     user_role: 'teacher', 
                     is_active: true 
-                }
+                },
+                transaction
             });
             
             if (!teacher) {
+                await transaction.rollback();
                 return res.status(400).json({
                     success: false,
                     message: 'Invalid teacher ID or teacher not active'
@@ -233,17 +246,22 @@ const updateClass = async (req, res) => {
         }
 
         const [updated_rows] = await Class.update(updates, {
-            where: { class_id }
+            where: { class_id },
+            transaction
         });
 
         if (updated_rows === 0) {
+            await transaction.rollback();
             return res.status(404).json({
                 success: false,
                 message: 'Class not found'
             });
         }
 
-        const updated_class = await Class.findByPk(class_id);
+        const updated_class = await Class.findByPk(class_id, { transaction });
+        
+        await transaction.commit();
+        console.log(`✅ Class "${updated_class.class_name}" updated successfully with transaction`);
         
         res.json({
             success: true,
@@ -251,7 +269,8 @@ const updateClass = async (req, res) => {
             message: 'Class updated successfully'
         });
     } catch (error) {
-        console.error('Error updating class:', error);
+        await transaction.rollback();
+        console.error('❌ Update class failed, transaction rolled back:', error);
         res.status(500).json({
             success: false,
             message: 'Failed to update class',
@@ -305,12 +324,15 @@ const getClassStudents = async (req, res) => {
  * Useful for managing class enrollment and exam eligibility
  */
 const addStudentToClass = async (req, res) => {
+    const transaction = await models.sequelize.transaction();
+    
     try {
         const { class_id } = req.params;
         const { student_id } = req.body;
 
         // Check if user is admin or teacher
         if (req.user.user_role !== 'admin' && req.user.user_role !== 'teacher') {
+            await transaction.rollback();
             return res.status(403).json({
                 success: false,
                 message: 'Bạn không có quyền thực hiện thao tác này'
@@ -323,10 +345,12 @@ const addStudentToClass = async (req, res) => {
                 user_id: student_id, 
                 user_role: 'student', 
                 is_active: true 
-            }
+            },
+            transaction
         });
 
         if (!student) {
+            await transaction.rollback();
             return res.status(400).json({
                 success: false,
                 message: 'Student not found or invalid'
@@ -334,8 +358,9 @@ const addStudentToClass = async (req, res) => {
         }
 
         // Check if class exists and has capacity
-        const class_info = await Class.findByPk(class_id);
+        const class_info = await Class.findByPk(class_id, { transaction });
         if (!class_info) {
+            await transaction.rollback();
             return res.status(404).json({
                 success: false,
                 message: 'Class not found'
@@ -344,10 +369,12 @@ const addStudentToClass = async (req, res) => {
 
         // Check current enrollment
         const current_count = await User.count({
-            where: { class_id, user_role: 'student', is_active: true }
+            where: { class_id, user_role: 'student', is_active: true },
+            transaction
         });
 
         if (current_count >= class_info.max_students) {
+            await transaction.rollback();
             return res.status(400).json({
                 success: false,
                 message: 'Class has reached maximum capacity'
@@ -365,10 +392,12 @@ const addStudentToClass = async (req, res) => {
                     is_active: true 
                 },
                 required: false
-            }]
+            }],
+            transaction
         });
 
         if (existing_class && existing_class.student_class) {
+            await transaction.rollback();
             return res.status(400).json({
                 success: false,
                 message: 'Student is already enrolled in another class for this academic year'
@@ -378,14 +407,23 @@ const addStudentToClass = async (req, res) => {
         // Add student to class
         await User.update(
             { class_id },
-            { where: { user_id: student_id } }
+            { 
+                where: { user_id: student_id },
+                transaction 
+            }
         );
 
         // Update class student count
         await Class.update(
             { current_students: current_count + 1 },
-            { where: { class_id } }
+            { 
+                where: { class_id },
+                transaction 
+            }
         );
+
+        await transaction.commit();
+        console.log(`✅ Student "${student.full_name}" added to class "${class_info.class_name}" successfully with transaction`);
 
         res.json({
             success: true,
@@ -393,7 +431,8 @@ const addStudentToClass = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Error adding student to class:', error);
+        await transaction.rollback();
+        console.error('❌ Add student to class failed, transaction rolled back:', error);
         res.status(500).json({
             success: false,
             message: 'Failed to add student to class',
@@ -407,11 +446,14 @@ const addStudentToClass = async (req, res) => {
  * Useful for managing class transfers and exam eligibility
  */
 const removeStudentFromClass = async (req, res) => {
+    const transaction = await models.sequelize.transaction();
+    
     try {
         const { class_id, student_id } = req.params;
 
         // Check if user is admin or teacher
         if (req.user.user_role !== 'admin' && req.user.user_role !== 'teacher') {
+            await transaction.rollback();
             return res.status(403).json({
                 success: false,
                 message: 'Bạn không có quyền thực hiện thao tác này'
@@ -424,10 +466,12 @@ const removeStudentFromClass = async (req, res) => {
                 user_id: student_id, 
                 class_id, 
                 user_role: 'student' 
-            }
+            },
+            transaction
         });
 
         if (!student) {
+            await transaction.rollback();
             return res.status(404).json({
                 success: false,
                 message: 'Student not found in this class'
@@ -437,18 +481,28 @@ const removeStudentFromClass = async (req, res) => {
         // Remove student from class
         await User.update(
             { class_id: null },
-            { where: { user_id: student_id } }
+            { 
+                where: { user_id: student_id },
+                transaction 
+            }
         );
 
         // Update class student count
         const current_count = await User.count({
-            where: { class_id, user_role: 'student', is_active: true }
+            where: { class_id, user_role: 'student', is_active: true },
+            transaction
         });
 
         await Class.update(
             { current_students: current_count },
-            { where: { class_id } }
+            { 
+                where: { class_id },
+                transaction 
+            }
         );
+
+        await transaction.commit();
+        console.log(`✅ Student "${student.full_name}" removed from class successfully with transaction`);
 
         res.json({
             success: true,
@@ -456,7 +510,8 @@ const removeStudentFromClass = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Error removing student from class:', error);
+        await transaction.rollback();
+        console.error('❌ Remove student from class failed, transaction rolled back:', error);
         res.status(500).json({
             success: false,
             message: 'Failed to remove student from class',
