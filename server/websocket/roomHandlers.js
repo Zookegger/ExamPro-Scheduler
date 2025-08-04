@@ -2,18 +2,8 @@
  * Room Management WebSocket Handlers - Real-time room updates
  * 
  * Handles real-time updates for room management including:
- * - Room CRUD    a    async handle_room_deleted(socket, data) {
-        try {
-            // Verify admin permission
-            if (!requireAdminPermission(socket)) {
-                return;
-            }andle_room_updated(socket, data) {
-        try {
-            // Verify admin permission
-            if (!requireAdminPermission(socket)) {
-                return;
-            }tions notifications
- * - Real-time exam status updates
+ * - Room CRUD operations
+ * - Real-time exam status updates  
  * - Room availability changes
  * - Administrative notifications
  * 
@@ -29,6 +19,7 @@
 const { models } = require('../models');
 const { Room, Exam, User } = models;
 const { requireAdminPermission } = require('./authorizationHandlers');
+const { Op } = require('sequelize');
 
 // Event constants for room operations
 const ROOM_EVENTS = {
@@ -319,7 +310,7 @@ class RoomHandler {
 
             const room_statuses = await Promise.all(
                 rooms.map(async (room) => {
-                    const exam_status = await this.get_room_exam_status(room.room_id);
+                    const exam_status = await this.getRoomExamStatus(room.room_id);
                     return {
                         room_id: room.room_id,
                         room_name: room.room_name,
@@ -347,7 +338,7 @@ class RoomHandler {
      */
     async send_room_status_update(socket, room_id) {
         try {
-            const exam_status = await this.get_room_exam_status(room_id);
+            const exam_status = await this.getRoomExamStatus(room_id);
 
             socket.emit(this.events.STATUS_UPDATE, {
                 success: true,
@@ -368,7 +359,7 @@ class RoomHandler {
      */
     async check_and_update_room_exam_status(room_id) {
         try {
-            const exam_status = await this.get_room_exam_status(room_id);
+            const exam_status = await this.getRoomExamStatus(room_id);
 
             // Broadcast status change to all connected clients
             this.io.to('room_management').emit(this.events.EXAM_STATUS_CHANGE, {
@@ -388,7 +379,7 @@ class RoomHandler {
      * @param {number} room_id - Room ID to check
      * @returns {Promise<Object>} Exam status information
      */
-    async get_room_exam_status(room_id) {
+    async getRoomExamStatus(room_id) {
         try {
             const now = new Date();
 
@@ -397,16 +388,16 @@ class RoomHandler {
                 where: {
                     room_id: room_id,
                     exam_date: {
-                        [sequelize.Sequelize.Op.eq]: sequelize.Sequelize.fn('DATE', now)
+                        [Op.eq]: models.sequelize.fn('DATE', now)
                     },
                     start_time: {
-                        [sequelize.Sequelize.Op.lte]: now.toTimeString().slice(0, 8)
+                        [Op.lte]: now.toTimeString().slice(0, 8)
                     },
                     end_time: {
-                        [sequelize.Sequelize.Op.gte]: now.toTimeString().slice(0, 8)
+                        [Op.gte]: now.toTimeString().slice(0, 8)
                     },
                     status: {
-                        [sequelize.Sequelize.Op.in]: ['active', 'ongoing']
+                        [Op.in]: ['active', 'ongoing']
                     }
                 },
                 attributes: ['exam_id', 'title', 'start_time', 'end_time', 'exam_date']

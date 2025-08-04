@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { create_user, get_all_users } from "../../services/apiService";
+import { createUser, getAllUsers } from "../../services/apiService";
 import AccessDeniedPage from "../common/AccessDeniedPage";
 import Breadcrumb from "../../components/Breadcrumb";
 
@@ -24,7 +24,7 @@ function ManageUserPage({current_user_role}) {
 
     const handle_api_get_all_user = async () => {
         try {
-            const result = await get_all_users();
+            const result = await getAllUsers();
             console.log('API Result:', result); // Debug log
             if (result.success) {
                 set_users(result.users || []); // Ensure users is always an array
@@ -107,7 +107,7 @@ function ManageUserPage({current_user_role}) {
         
         try {
             if (modal_mode === 'create') {
-                const result = await create_user(form_data);
+                const result = await createUser(form_data);
                 console.log('Create user result:', result);
                 
                 if (result.success) {

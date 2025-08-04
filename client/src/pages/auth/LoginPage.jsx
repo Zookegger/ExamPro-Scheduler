@@ -16,6 +16,8 @@ function LoginPage({ set_is_logged_in, set_current_user_id, set_current_user_nam
 		try {
 			const result = await login({ user_name, password });
 			
+			
+
 			if (result.success) {
 				set_validation_message(result.message || "Đăng nhập thành công!");
 				set_is_logged_in(true);

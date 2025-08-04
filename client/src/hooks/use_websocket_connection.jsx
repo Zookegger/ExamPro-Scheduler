@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
-import { get_socket_url, get_auth_token } from '../services/apiService';
+import { getSocketUrl, getAuthToken } from '../services/apiService';
 
 /**
  * Custom WebSocket Hook for ExamPro Real-Time Features
@@ -22,276 +22,349 @@ import { get_socket_url, get_auth_token } from '../services/apiService';
  * @param {Object} options.events - Event handlers object
  * @param {string} options.namespace - Optional Socket.io namespace
  * @param {boolean} options.auto_connect - Whether to auto-connect on mount
- * @param {boolean} options.use_singleton - Use shared connection (default: true)
+ * @param {boolean} options.debug - Enable debug logging
+ * @param {number} options.max_reconnect_attempts - Max reconnection attempts
+ * @param {number} options.reconnect_delay - Base delay between reconnections
  * @returns {Object} WebSocket connection utilities
- * 
- * @example
- * // Basic usage in any component
- * const { socket, connection_status, emit_event } = useWebsocketConnection({
- *     events: {
- *         'room_table_update': handle_room_update,
- *         'assignment_notification': handle_notification
- *     }
- * });
  */
+
 // Singleton WebSocket instance for performance
 let global_socket = null;
-let global_connection_status = 'disconnected';
-let global_is_connected = false;
-let global_is_authenticated = false;
+let global_connection_state = 'disconnected';
 let global_reconnect_attempts = 0;
+const global_event_handlers = new Map(); // Track all event handlers
+let authentication_attempted = false; // Track if authentication has been attempted
+
+const CONNECTION_STATES = {
+    DISCONNECTED: 'disconnected',
+    CONNECTING: 'connecting',
+    CONNECTED: 'connected',
+    AUTHENTICATED: 'authenticated',
+    RECONNECTING: 'reconnecting',
+    ERROR: 'error'
+};
 
 function useWebsocketConnection(options = {}) {
     const { 
         events = {}, 
         namespace = '', 
         auto_connect = true,
+        debug = false,
         max_reconnect_attempts = 5,
         reconnect_delay = 1000
     } = options;
 
-    // ================================================================
-    // STATE MANAGEMENT
-    // ================================================================
-    const [connection_status, set_connection_status] = useState(global_connection_status);
-    const [is_connected, set_is_connected] = useState(global_is_connected);
-    const [is_authenticated, set_is_authenticated] = useState(global_is_authenticated);
     const socket_ref = useRef(null);
+    const [connection_state, set_connection_state] = useState(global_connection_state);
+    const [error_message, set_error_message] = useState(null);
+    const component_id = useRef(`component_${Date.now()}_${Math.random()}`);
+    const is_mounted = useRef(true);
 
-    // Update global state handlers
-    const update_connection_status = useCallback((status) => {
-        global_connection_status = status;
-        set_connection_status(status);
+    const is_connected = connection_state === CONNECTION_STATES.CONNECTED || 
+                        connection_state === CONNECTION_STATES.AUTHENTICATED;
+    const is_authenticated = connection_state === CONNECTION_STATES.AUTHENTICATED;
+
+    // Store events in a ref to avoid dependency issues
+    const events_ref = useRef(events);
+    const debug_ref = useRef(debug);
+    events_ref.current = events;
+    debug_ref.current = debug;
+
+    // Debug logging helper
+    const debug_log = useCallback((message, ...args) => {
+        if (debug_ref.current) {
+            console.log(`🔌 [WebSocket-${component_id.current.slice(-6)}] ${message}`, ...args);
+        }
     }, []);
 
-    const update_is_connected = useCallback((connected) => {
-        global_is_connected = connected;
-        set_is_connected(connected);
-    }, []);
+    // Update global state and sync with all components
+    const update_connection_status = useCallback((new_state) => {
+        if (!is_mounted.current) return;
+        
+        global_connection_state = new_state;
+        set_connection_state(new_state);
+        debug_log('Global state updated:', new_state);
+    }, [debug_log]);
 
-    const update_is_authenticated = useCallback((authenticated) => {
-        global_is_authenticated = authenticated;
-        set_is_authenticated(authenticated);
-    }, []);
+    // Set error with auto-clearing
+    const set_error = useCallback((message) => {
+        if (!is_mounted.current) return;
+        
+        set_error_message(message);
+        debug_log('Error:', message);
+        
+        setTimeout(() => {
+            if (is_mounted.current) set_error_message(null);
+        }, 10000);
+    }, [debug_log]);
 
-    // ================================================================
-    // AUTHENTICATION FUNCTIONS
-    // ================================================================
+    // Authentication function
     const authenticate_socket = useCallback(async () => {
         try {
-            const token = await get_auth_token();
-            if (!token || !global_socket || !global_is_connected) {
+            // If already authenticated, don't try again
+            if (connection_state === CONNECTION_STATES.AUTHENTICATED) {
+                debug_log('Already authenticated, skipping authentication');
+                return true;
+            }
+            
+            // If authentication is in progress, don't try again
+            if (authentication_attempted && connection_state === CONNECTION_STATES.CONNECTED) {
+                debug_log('Authentication already in progress, skipping duplicate attempt');
+                return false;
+            }
+            
+            const token = await getAuthToken();
+            if (!token || !socket_ref.current || !is_connected) {
+                debug_log('Cannot authenticate: missing token, socket, or not connected');
                 return false;
             }
 
-            console.log('🔐 Authenticating WebSocket connection...');
+            debug_log('Authenticating WebSocket connection...');
+            authentication_attempted = true; // Mark that we've tried authentication
 
             return new Promise((resolve) => {
                 const timeout = setTimeout(() => {
-                    console.error('❌ WebSocket authentication timeout');
+                    debug_log('Authentication timeout');
+                    authentication_attempted = false; // Reset on timeout
                     resolve(false);
                 }, 5000);
 
                 const cleanup = () => {
                     clearTimeout(timeout);
-                    global_socket.off('authorization_success', success_handler);
-                    global_socket.off('authorization_error', error_handler);
+                    socket_ref.current.off('authorization_success', success_handler);
+                    socket_ref.current.off('authorization_error', error_handler);
                 };
 
                 const success_handler = (data) => {
                     cleanup();
-                    update_is_authenticated(true);
-                    console.log('✅ WebSocket authenticated for user:', data.user_role);
+                    update_connection_status(CONNECTION_STATES.AUTHENTICATED);
+                    debug_log('Authentication successful for user:', data.user_role);
                     resolve(true);
                 };
 
                 const error_handler = (data) => {
                     cleanup();
-                    update_is_authenticated(false);
-                    console.error('❌ WebSocket authentication failed:', data.message);
+                    update_connection_status(CONNECTION_STATES.CONNECTED);
+                    debug_log('Authentication failed:', data.message);
+                    authentication_attempted = false; // Reset on failure
                     resolve(false);
                 };
 
-                global_socket.once('authorization_success', success_handler);
-                global_socket.once('authorization_error', error_handler);
-
-                global_socket.emit('authenticate', { token });
+                socket_ref.current.once('authorization_success', success_handler);
+                socket_ref.current.once('authorization_error', error_handler);
+                socket_ref.current.emit('authenticate', { token });
             });
         } catch (error) {
-            console.error('❌ WebSocket authentication error:', error);
+            debug_log('Authentication error:', error);
+            authentication_attempted = false; // Reset on error
             return false;
         }
-    }, [update_is_authenticated]);
+    }, [debug_log, is_connected, update_connection_status, connection_state]);
 
-    // ================================================================
-    // RECONNECTION WITH EXPONENTIAL BACKOFF
-    // ================================================================
+    // Reconnection with exponential backoff
     const attempt_reconnection = useCallback(() => {
         if (global_reconnect_attempts >= max_reconnect_attempts) {
-            console.error('❌ Max reconnection attempts reached');
+            debug_log('Max reconnection attempts reached');
             return;
         }
 
         global_reconnect_attempts++;
-        const delay = reconnect_delay * Math.pow(2, global_reconnect_attempts - 1);
+        const delay = Math.min(
+            reconnect_delay * Math.pow(2, global_reconnect_attempts - 1),
+            30000 // Max 30 seconds delay
+        );
         
-        console.log(`🔄 Attempting reconnection ${global_reconnect_attempts}/${max_reconnect_attempts} in ${delay}ms`);
+        debug_log(`Attempting reconnection ${global_reconnect_attempts}/${max_reconnect_attempts} in ${delay}ms`);
         
         setTimeout(() => {
-            if (global_socket && !global_is_connected) {
-                global_socket.connect();
+            if (socket_ref.current && !socket_ref.current.connected) {
+                socket_ref.current.connect();
             }
         }, delay);
-    }, [max_reconnect_attempts, reconnect_delay]);
+    }, [debug_log, max_reconnect_attempts, reconnect_delay]);
 
-    // ================================================================
-    // CONNECTION MANAGEMENT
-    // ================================================================
-    useEffect(() => {
-        if (!auto_connect) return;
+    // Register event handlers
+    const register_handlers = useCallback((socket) => {
+        if (!socket) return;
 
-        // Use singleton pattern for better performance
-        if (global_socket && global_is_connected) {
-            console.log('🔌 Using existing WebSocket connection');
-            socket_ref.current = global_socket;
-            
-            // Register this component's event handlers
-            Object.entries(events).forEach(([event_name, handler]) => {
-                if (typeof handler === 'function') {
-                    global_socket.on(event_name, handler);
+        // Track this component's handlers
+        const component_handlers = new Map();
+
+        Object.entries(events_ref.current).forEach(([event_name, handler]) => {
+            if (typeof handler === 'function') {
+                // Only add handler if not already registered
+                if (!global_event_handlers.has(event_name)) {
+                    socket.on(event_name, handler);
+                    global_event_handlers.set(event_name, new Set());
                 }
-            });
-            
-            return;
-        }
+                
+                // Track this component's handler
+                if (!global_event_handlers.get(event_name).has(handler)) {
+                    global_event_handlers.get(event_name).add(handler);
+                    component_handlers.set(event_name, handler);
+                }
+            }
+        });
+
+        return component_handlers;
+    }, []); // Remove events dependency
+
+    // Unregister event handlers
+    const unregister_handlers = useCallback((socket, component_handlers) => {
+        if (!socket || !component_handlers) return;
+
+        component_handlers.forEach((handler, event_name) => {
+            // Remove from global tracking
+            const handlers = global_event_handlers.get(event_name);
+            if (handlers) {
+                handlers.delete(handler);
+                
+                // Remove from socket if no more handlers
+                if (handlers.size === 0) {
+                    socket.off(event_name);
+                    global_event_handlers.delete(event_name);
+                }
+            }
+        });
+    }, []);
+
+    // Connection management
+    useEffect(() => {
+        is_mounted.current = true;
+        let component_handlers = new Map();
 
         const initialize_websocket = async () => {
-            console.log('🔌 Initializing new WebSocket connection...');
-            
-            // Get WebSocket token for Sec-WebSocket-Protocol header
-            const websocket_token = await get_auth_token();
-            
-            // Create WebSocket connection using centralized URL
-            const socket_url = get_socket_url();
-            const socket_options = {
-                transports: ['websocket', 'polling'],
-                timeout: 20000,
-                forceNew: false,
-                upgrade: true,
-                rememberUpgrade: true
-            };
+            if (!auto_connect) return;
 
-            // Add JWT token via Sec-WebSocket-Protocol header if available
-            if (websocket_token) {
-                socket_options.auth = {
-                    token: websocket_token
-                };
-                console.log('🔐 WebSocket token added to connection options');
+            // Use existing connection if available
+            if (global_socket && global_socket.connected) {
+                debug_log('Using existing WebSocket connection');
+                socket_ref.current = global_socket;
+                component_handlers = register_handlers(global_socket);
+                return;
             }
 
-            const new_socket = io(socket_url + namespace, socket_options);
-
-            global_socket = new_socket;
-            socket_ref.current = new_socket;
-
-            // Enhanced connection event handlers
-            new_socket.on('connect', () => {
-                console.log('✅ Connected to WebSocket server');
-                update_connection_status('connected');
-                update_is_connected(true);
-                global_reconnect_attempts = 0;
+            debug_log('Initializing new WebSocket connection...');
+            
+            try {
+                const websocket_token = await getAuthToken();
+                const socket_url = getSocketUrl();
                 
-                // Authentication is handled automatically via Sec-WebSocket-Protocol header
-                // The server will emit authorization_success if pre-authenticated
-            });
+                // Important: We should ALWAYS include auth options with null token
+                // rather than omitting the auth field. This makes behavior consistent.
+                const socket_options = {
+                    transports: ['websocket', 'polling'],
+                    timeout: 20000,
+                    forceNew: false,
+                    upgrade: true,
+                    rememberUpgrade: true,
+                    auth: { token: websocket_token || null }
+                };
 
-            new_socket.on('disconnect', (reason) => {
-                console.log(`❌ Disconnected from WebSocket server: ${reason}`);
-                update_connection_status('disconnected');
-                update_is_connected(false);
-                update_is_authenticated(false);
-                
-                // Attempt reconnection for network issues
-                if (reason !== 'io client disconnect' && reason !== 'io server disconnect') {
+                const new_socket = io(socket_url + namespace, socket_options);
+                global_socket = new_socket;
+                socket_ref.current = new_socket;
+
+                // Connection event handlers
+                new_socket.on('connect', async () => {
+                    debug_log('Connected to WebSocket server');
+                    update_connection_status(CONNECTION_STATES.CONNECTED);
+                    global_reconnect_attempts = 0;
+                    authentication_attempted = false; // Reset authentication flag on new connection
+                    
+                    // If we provided a token in auth options, Socket.IO will automatically
+                    // pass it to the server's authentication middleware. No need to manually
+                    // authenticate again unless we receive an error.
+                    if (websocket_token) {
+                        debug_log('Token provided in socket options, waiting for auto-authentication');
+                    }
+                });
+
+                new_socket.on('disconnect', (reason) => {
+                    debug_log(`Disconnected: ${reason}`);
+                    update_connection_status(CONNECTION_STATES.DISCONNECTED);
+                    authentication_attempted = false; // Reset authentication flag on disconnect
+                    
+                    if (reason !== 'io client disconnect') {
+                        attempt_reconnection();
+                    }
+                });
+
+                new_socket.on('connect_error', (error) => {
+                    debug_log('Connection error:', error);
+                    update_connection_status(CONNECTION_STATES.ERROR);
                     attempt_reconnection();
-                }
-            });
+                });
 
-            new_socket.on('connect_error', (error) => {
-                console.error('❌ WebSocket connection error:', error);
-                update_connection_status('error');
-                update_is_connected(false);
-                
-                // Attempt reconnection on connection errors
-                attempt_reconnection();
-            });
+                new_socket.on('reconnect', (attempt_number) => {
+                    debug_log(`Reconnected after ${attempt_number} attempts`);
+                    update_connection_status(CONNECTION_STATES.CONNECTED);
+                    global_reconnect_attempts = 0;
+                });
 
-            new_socket.on('reconnect', (attempt_number) => {
-                console.log(`🔌 WebSocket reconnected after ${attempt_number} attempts`);
-                update_connection_status('connected');
-                update_is_connected(true);
-                global_reconnect_attempts = 0;
-                
-                // Authentication will be handled automatically on reconnection via token
-            });
+                // Authentication handlers
+                new_socket.on('authorization_success', () => {
+                    debug_log('Authentication successful');
+                    update_connection_status(CONNECTION_STATES.AUTHENTICATED);
+                });
 
-            // Authentication handlers
-            new_socket.on('authorization_success', (data) => {
-                console.log('✅ WebSocket authentication successful');
-                update_is_authenticated(true);
-            });
+                new_socket.on('authorization_error', (data) => {
+                    debug_log('Authentication failed:', data);
+                    update_connection_status(CONNECTION_STATES.CONNECTED);
+                });
 
-            new_socket.on('authorization_error', (data) => {
-                console.error('❌ WebSocket authentication failed:', data);
-                update_is_authenticated(false);
-            });
-
-            // Register custom event handlers
-            Object.entries(events).forEach(([event_name, handler]) => {
-                if (typeof handler === 'function') {
-                    new_socket.on(event_name, handler);
-                }
-            });
+                // Register custom event handlers
+                component_handlers = register_handlers(new_socket);
+            } catch (error) {
+                debug_log('Initialization error:', error);
+                set_error('Failed to initialize WebSocket connection');
+            }
         };
 
         initialize_websocket();
 
-        // Cleanup on unmount
         return () => {
-            console.log('🧹 Cleaning up WebSocket event handlers for component');
+            is_mounted.current = false;
+            debug_log('Cleaning up WebSocket handlers');
+            
             if (socket_ref.current) {
-                // Remove only this component's event handlers
-                Object.entries(events).forEach(([event_name, handler]) => {
-                    if (typeof handler === 'function') {
-                        socket_ref.current.off(event_name, handler);
-                    }
-                });
+                unregister_handlers(socket_ref.current, component_handlers);
+                
+                // Only disconnect if no components are using the socket
+                if (global_event_handlers.size === 0 && global_socket) {
+                    debug_log('No more active handlers - disconnecting socket');
+                    global_socket.disconnect();
+                    global_socket = null;
+                }
             }
         };
-    }, [auto_connect, namespace, events, authenticate_socket, attempt_reconnection, update_connection_status, update_is_connected, update_is_authenticated]);
+    }, [
+        auto_connect,
+        namespace,
+        debug_log,
+        update_connection_status,
+        attempt_reconnection,
+        set_error,
+        register_handlers,
+        unregister_handlers
+    ]); // Fixed with stable function references
 
-    // ================================================================
-    // UTILITY FUNCTIONS
-    // ================================================================
+    // Utility functions
     const emit_event = useCallback((event_name, data) => {
-        if (socket_ref.current && is_connected) {
+        if (socket_ref.current && socket_ref.current.connected) {
             socket_ref.current.emit(event_name, data);
             return true;
-        } else {
-            console.warn(`Cannot emit '${event_name}' - WebSocket not connected`);
-            return false;
         }
-    }, [is_connected]);
+        debug_log(`Cannot emit '${event_name}' - WebSocket not connected`);
+        return false;
+    }, [debug_log]);
 
     const disconnect_socket = useCallback(() => {
         if (socket_ref.current) {
             socket_ref.current.disconnect();
-            global_socket = null;
-            update_connection_status('disconnected');
-            update_is_connected(false);
-            update_is_authenticated(false);
+            update_connection_status(CONNECTION_STATES.DISCONNECTED);
         }
-    }, [update_connection_status, update_is_connected, update_is_authenticated]);
+    }, [update_connection_status]);
 
     const reconnect_socket = useCallback(() => {
         if (socket_ref.current) {
@@ -299,48 +372,25 @@ function useWebsocketConnection(options = {}) {
         }
     }, []);
 
-    // ================================================================
-    // ROOM MANAGEMENT FUNCTIONS
-    // ================================================================
+    // Room management functions
     const join_room_management = useCallback(() => {
-        if (!socket_ref.current || !is_connected) {
-            console.error('❌ Cannot join room management: WebSocket not connected');
-            return false;
-        }
-
-        console.log('🏢 Joining room management channel...');
-        emit_event('join_room_management');
-        return true;
-    }, [is_connected, emit_event]);
+        return emit_event('join_room_management');
+    }, [emit_event]);
 
     const leave_room_management = useCallback(() => {
-        if (!socket_ref.current || !is_connected) {
-            return false;
-        }
-
-        console.log('👋 Leaving room management channel...');
-        emit_event('leave_room_management');
-        return true;
-    }, [is_connected, emit_event]);
+        return emit_event('leave_room_management');
+    }, [emit_event]);
 
     const request_room_status_update = useCallback((room_id = null) => {
-        if (!socket_ref.current || !is_connected) {
-            console.error('❌ Cannot request room status: WebSocket not connected');
-            return false;
-        }
+        return emit_event('request_room_status_update', { room_id });
+    }, [emit_event]);
 
-        emit_event('request_room_status_update', { room_id });
-        return true;
-    }, [is_connected, emit_event]);
-
-    // ================================================================
-    // RETURN HOOK INTERFACE
-    // ================================================================
     return {
         socket: socket_ref.current,
-        connection_status,
+        connection_status: connection_state,
         is_connected,
         is_authenticated,
+        error_message,
         emit_event,
         disconnect_socket,
         reconnect_socket,

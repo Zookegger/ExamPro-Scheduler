@@ -43,7 +43,7 @@ router.get('/', authenticate_jwt, getUserNotifications);
  * @desc    Mark all notifications as read for the authenticated user
  * @access  Private (requires JWT token)
  */
-router.put('/read-all', authenticate_jwt, markAllNotificationsAsRead);
+router.put('/mark-all-read', authenticate_jwt, markAllNotificationsAsRead);
 
 /**
  * @route   PUT /api/notifications/:notification_id/read

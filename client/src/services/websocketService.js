@@ -15,7 +15,7 @@
  */
 
 import { io } from 'socket.io-client';
-import { get_auth_token } from './apiService';
+import { getAuthToken } from './apiService';
 
 class WebSocketService {
     constructor() {
@@ -154,7 +154,7 @@ class WebSocketService {
      */
     async authenticate() {
         try {
-            const token = get_auth_token();
+            const token = getAuthToken();
             if (!token) {
                 console.warn('⚠️ No auth token available for WebSocket authentication');
                 return false;
@@ -210,7 +210,7 @@ class WebSocketService {
      * Try to authenticate if token is available
      */
     async authenticate_if_possible() {
-        const token = get_auth_token();
+        const token = getAuthToken();
         if (token && this.is_connected && !this.is_authenticated) {
             await this.authenticate();
         }

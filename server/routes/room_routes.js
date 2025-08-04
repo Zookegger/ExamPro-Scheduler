@@ -4,11 +4,11 @@ const db = require('../models');
 const { authenticate_jwt } = require('../middleware/auth');
 const { require_admin_role } = require('../middleware/admin');
 const {
-    get_all_rooms,
-    get_room_exam_status,
-    create_room,
-    update_room,
-    delete_room
+    getAllRooms,
+    getRoomExamStatus,
+    createRoom,
+    updateRoom,
+    deleteRoom
 } = require('../controllers/roomController');
 
 /**
@@ -62,7 +62,7 @@ const {
  *   "message": "Rooms retrieved successfully"
  * }
  */
-router.get('/get-all-rooms', authenticate_jwt, require_admin_role, get_all_rooms);
+router.get('/get-all-rooms', authenticate_jwt, require_admin_role, getAllRooms);
 
 /**
  * @route GET /api/rooms/exam-status/:room_id
@@ -105,7 +105,7 @@ router.get('/get-all-rooms', authenticate_jwt, require_admin_role, get_all_rooms
 router.get('/exam-status/:room_id', authenticate_jwt, require_admin_role, async (req, res) => {
     try {
         const { room_id } = req.params;
-        const exam_status = await get_room_exam_status(parseInt(room_id));
+        const exam_status = await getRoomExamStatus(parseInt(room_id));
         
         res.json({
             success: true,
@@ -158,7 +158,7 @@ router.get('/exam-status/:room_id', authenticate_jwt, require_admin_role, async 
  *   "message": "Phòng đã được tạo thành công"
  * }
  */
-router.post('/create-room', authenticate_jwt, require_admin_role, create_room);
+router.post('/create-room', authenticate_jwt, require_admin_role, createRoom);
 
 /**
  * @route PUT /api/rooms/update-room/:room_id
@@ -193,7 +193,7 @@ router.post('/create-room', authenticate_jwt, require_admin_role, create_room);
  *   "message": "Phòng đã được cập nhật thành công"
  * }
  */
-router.put('/update-room/:room_id', authenticate_jwt, require_admin_role, update_room);
+router.put('/update-room/:room_id', authenticate_jwt, require_admin_role, updateRoom);
 
 /**
  * @route DELETE /api/rooms/delete-room/:room_id
@@ -222,7 +222,7 @@ router.put('/update-room/:room_id', authenticate_jwt, require_admin_role, update
  *   "message": "Không thể xóa phòng đang được sử dụng cho kỳ thi"
  * }
  */
-router.delete('/delete-room/:room_id', authenticate_jwt, require_admin_role, delete_room);
+router.delete('/delete-room/:room_id', authenticate_jwt, require_admin_role, deleteRoom);
 
 /**
  * Error Handler Middleware for Room Routes

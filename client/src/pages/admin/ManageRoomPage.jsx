@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import AccessDeniedPage from "../common/AccessDeniedPage";
 import Breadcrumb from "../../components/Breadcrumb";
-import { get_all_rooms, create_room, update_room, delete_room } from "../../services/apiService";
+import { getAllRooms, createRoom, updateRoom, deleteRoom } from "../../services/apiService";
 import useWebsocketConnection from "../../hooks/use_websocket_connection";
 
 function ManageRoomPage({ current_user, current_user_role }) {
@@ -24,23 +24,10 @@ function ManageRoomPage({ current_user, current_user_role }) {
     const [filter_status, set_filter_status] = useState('all');
     const [error_message, set_error_message] = useState('');
 
-    // WebSocket event handlers for real-time room management
-    const room_websocket_events = {
-        'room_table_update': handle_room_table_update,
-        'room_exam_status_change': handle_room_status_change,
-        'room_status_update': handle_room_status_update,
-        'room_notification': handle_room_notification,
-        'room_error': handle_room_error
-    };
-
-    // Initialize WebSocket connection
-    const { is_connected, emit_event } = useWebsocketConnection({
-        events: room_websocket_events,
-        auto_connect: true
-    });
-
-    // WebSocket event handler functions
-    function handle_room_table_update(data) {
+    // ====================================================================
+    // WEBSOCKET EVENT HANDLER FUNCTIONS
+    // ====================================================================
+    const handle_room_table_update = useCallback((data) => {
         console.log('🏢 Room table update received:', data);
         const { action, room, admin_info } = data;
 
@@ -60,9 +47,9 @@ function ManageRoomPage({ current_user, current_user_role }) {
             default:
                 console.warn('Unknown room table update action:', action);
         }
-    }
+    }, []);
 
-    function handle_room_status_change(data) {
+    const handle_room_status_change = useCallback((data) => {
         console.log('📊 Room status change received:', data);
         const { room_id, status, exam_info } = data;
 
@@ -81,9 +68,9 @@ function ManageRoomPage({ current_user, current_user_role }) {
             }
             return room;
         }));
-    }
+    }, []);
 
-    function handle_room_status_update(data) {
+    const handle_room_status_update = useCallback((data) => {
         console.log('🔄 Room status update received:', data);
         if (data.success && data.room_statuses) {
             // Update multiple room statuses
@@ -98,21 +85,36 @@ function ManageRoomPage({ current_user, current_user_role }) {
                 return room;
             }));
         }
-    }
+    }, []);
 
-    function handle_room_notification(data) {
+    const handle_room_notification = useCallback((data) => {
         console.log('📢 Room notification received:', data);
         if (data.success) {
             show_success_toast(data.message);
         } else {
             show_error_toast(data.message);
         }
-    }
+    }, []);
 
-    function handle_room_error(data) {
+    const handle_room_error = useCallback((data) => {
         console.error('❌ Room error received:', data);
         show_error_toast(data.message || 'Lỗi hệ thống');
-    }
+    }, []);
+
+    // WebSocket event handlers for real-time room management
+    const room_websocket_events = useMemo(() => ({
+        'room_table_update': handle_room_table_update,
+        'room_exam_status_change': handle_room_status_change,
+        'room_status_update': handle_room_status_update,
+        'room_notification': handle_room_notification,
+        'room_error': handle_room_error
+    }), [handle_room_table_update, handle_room_status_change, handle_room_status_update, handle_room_notification, handle_room_error]);
+
+    // Initialize WebSocket connection
+    const { is_connected, emit_event } = useWebsocketConnection({
+        events: room_websocket_events,
+        auto_connect: true
+    });
 
     // Helper functions for exam status display
     function get_exam_status_text(status) {
@@ -155,7 +157,7 @@ function ManageRoomPage({ current_user, current_user_role }) {
             set_loading(true);
             console.log('Fetching rooms from API...');
             
-            const result = await get_all_rooms();
+            const result = await getAllRooms();
             
             if (result.success) {
                 set_rooms(result.rooms || []);
@@ -255,7 +257,7 @@ function ManageRoomPage({ current_user, current_user_role }) {
             
             if (modal_mode === 'create') {
                 console.log('Creating room:', form_data);
-                const result = await create_room(form_data);
+                const result = await createRoom(form_data);
                 
                 if (result.success) {
                     console.log('Room created successfully:', result.room);
@@ -275,7 +277,7 @@ function ManageRoomPage({ current_user, current_user_role }) {
                 }
             } else if (modal_mode === 'edit') {
                 console.log('Updating room:', selected_room.room_id, form_data);
-                const result = await update_room(selected_room.room_id, form_data);
+                const result = await updateRoom(selected_room.room_id, form_data);
                 
                 if (result.success) {
                     console.log('Room updated successfully:', result.room);
@@ -298,7 +300,7 @@ function ManageRoomPage({ current_user, current_user_role }) {
                 }
             } else if (modal_mode === 'delete') {
                 console.log('Deleting room:', selected_room.room_id);
-                const result = await delete_room(selected_room.room_id);
+                const result = await deleteRoom(selected_room.room_id);
                 
                 if (result.success) {
                     emit_event('room_deleted', {

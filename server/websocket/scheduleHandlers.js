@@ -128,6 +128,18 @@ class ScheduleHandler {
 				return;
 			}
 
+			// Prevent rapid consecutive requests (rate limiting)
+			const now = Date.now();
+			const lastRequest = socket.lastLiveStatsRequest || 0;
+			const minInterval = 2000; // 2 seconds minimum between requests
+			
+			if (now - lastRequest < minInterval) {
+				console.log(`⚠️ Rate limiting live stats request from ${socket.user?.user_name}`);
+				return;
+			}
+			
+			socket.lastLiveStatsRequest = now;
+
 			console.log(`📊 Admin ${socket.user?.user_name} requested live stats`);
 			
 			// Get exam_id from request data or use a default exam for demo
@@ -151,6 +163,68 @@ class ScheduleHandler {
 				success: false,
 				message: "Lỗi hệ thống khi tải thống kê",
 				error_type: ERROR_TYPES.DATABASE_ERROR
+			});
+		}
+	}
+
+	/**
+	 * Handle request for exam statistics (for ManageExamPage)
+	 * @param {Object} data - Request data from client
+	 * @param {Object} socket - Socket instance for authorization
+	 */
+	async handleExamStatsRequest(data, socket) {
+		try {
+			// 🔐 Authorization check - only admins can view exam stats
+			if (!requireAdminPermission(socket)) {
+				return;
+			}
+
+			// Prevent rapid consecutive requests (rate limiting)
+			const now = Date.now();
+			const lastRequest = socket.lastExamStatsRequest || 0;
+			const minInterval = 1000; // 1 second minimum between requests
+			
+			if (now - lastRequest < minInterval) {
+				console.log(`⚠️ Rate limiting exam stats request from ${socket.user?.user_name}`);
+				return;
+			}
+			
+			socket.lastExamStatsRequest = now;
+
+			console.log(`📊 Admin ${socket.user?.user_name} requested exam stats`);
+			
+			// For now, send mock exam stats. In a real implementation, 
+			// you would fetch actual exam statistics from the database
+			const mock_exam_stats = {
+				1: {
+					unregistered_student_ids: [101, 102, 103],
+					unassigned_proctor_ids: [201, 202]
+				},
+				2: {
+					unregistered_student_ids: [104, 105],
+					unassigned_proctor_ids: [203]
+				}
+			};
+
+			// Send stats for each exam - emit once per exam instead of individual emits
+			Object.entries(mock_exam_stats).forEach(([exam_id, stats]) => {
+				socket.emit('exam_stats_update', {
+					success: true,
+					exam_id: parseInt(exam_id),
+					unregistered_student_ids: stats.unregistered_student_ids,
+					unassigned_proctor_ids: stats.unassigned_proctor_ids,
+					timestamp: new Date().toISOString()
+				});
+			});
+
+			console.log(`✅ Exam stats sent for ${Object.keys(mock_exam_stats).length} exams`);
+		
+		} catch (error) {
+			console.error('❌ Error handling exam stats request:', error);
+			socket.emit('exam_stats_error', {
+				success: false,
+				message: 'Lỗi khi tải thống kê kỳ thi',
+				error_type: this.errors.DATABASE_ERROR
 			});
 		}
 	}
@@ -525,6 +599,10 @@ function register_schedule_handlers(socket, io_stream) {
 	socket.on(
 		"request_live_stats",
 		(data) => handler.handleLiveStatsRequest(data, socket)
+	);
+	socket.on(
+		"request_exam_stats",
+		(data) => handler.handleExamStatsRequest(data, socket)
 	);
 	socket.on(
 		"assign_student_to_exam",

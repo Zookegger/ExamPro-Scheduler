@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from "react";
-import { io } from 'socket.io-client';
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import AccessDeniedPage from "../common/AccessDeniedPage";
 import Breadcrumb from "../../components/Breadcrumb";
+import useWebsocketConnection from '../../hooks/use_websocket_connection';
 
 function ManageExamPage({ current_user_role }) {
     // ====================================================================
@@ -41,9 +41,7 @@ function ManageExamPage({ current_user_role }) {
     const [filter_status, set_filter_status] = useState('all');
     const [error_message, set_error_message] = useState('');
 
-    // WebSocket states
-    const [socket, set_socket] = useState(null);
-    const [connection_status, set_connection_status] = useState('disconnected');
+    // WebSocket state is now managed by the custom hook
 
     // ====================================================================
     // HELPER FUNCTIONS
@@ -59,51 +57,45 @@ function ManageExamPage({ current_user_role }) {
     }
 
     // ====================================================================
-    // EFFECTS - WEBSOCKET CONNECTION
+    // EFFECTS - WEBSOCKET CONNECTION USING SINGLETON HOOK
     // ====================================================================
+    const handle_exam_stats_update = useCallback((data) => {
+        console.log('📊 Exam stats updated:', data);
+        set_exam_stats(prev => ({
+            ...prev,
+            [data.exam_id]: {
+                unregistered_student_ids: data.unregistered_student_ids || [],
+                unassigned_proctor_ids: data.unassigned_proctor_ids || []
+            }
+        }));
+    }, []); // Empty dependency array as set_exam_stats is stable
+
+    const handle_assignment_notification = useCallback((notification) => {
+        console.log('🔔 New assignment notification:', notification);
+    }, []);
+
+    const ws_events = useMemo(() => ({
+        exam_stats_update: handle_exam_stats_update,
+        assignment_notification: handle_assignment_notification,
+    }), [handle_exam_stats_update, handle_assignment_notification]);
+    
+    const { 
+        connection_status,
+        emit_event,
+        is_connected 
+    } = useWebsocketConnection({
+        events: ws_events,
+        debug: true
+    });
+    
+    // Request exam stats when connected
     useEffect(() => {
-        console.log('🔌 Initializing WebSocket connection for exam management...');
-        
-        // Create WebSocket connection
-        const new_socket = io('http://localhost:5000');
-        set_socket(new_socket);
+        if (is_connected) {
+            console.log('🔌 Requesting exam stats...');
+            emit_event('request_exam_stats');
+        }
+    }, [is_connected, emit_event]);
 
-        // Connection event handlers
-        new_socket.on('connect', () => {
-            console.log('✅ Connected to WebSocket server');
-            set_connection_status('connected');
-            
-            // Request exam stats for all exams
-            new_socket.emit('request_exam_stats');
-        });
-
-        new_socket.on('disconnect', () => {
-            console.log('❌ Disconnected from WebSocket server'); 
-            set_connection_status('disconnected');
-        });
-
-        // Listen for exam-specific updates
-        new_socket.on('exam_stats_update', (data) => {
-            console.log('📊 Exam stats updated:', data);
-            set_exam_stats(prev => ({
-                ...prev,
-                [data.exam_id]: {
-                    unregistered_student_ids: data.unregistered_student_ids || [],
-                    unassigned_proctor_ids: data.unassigned_proctor_ids || []
-                }
-            }));
-        });
-
-        new_socket.on('assignment_notification', (notification) => {
-            console.log('🔔 New assignment notification:', notification);
-        });
-
-        // Cleanup on component unmount
-        return () => {
-            console.log('🧹 Cleaning up WebSocket connection');
-            new_socket.disconnect();
-        };
-    }, []); // Run once on component mount
 
     // ====================================================================
     // EFFECTS - INITIAL DATA LOADING

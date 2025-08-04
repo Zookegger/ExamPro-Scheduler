@@ -291,18 +291,32 @@ function setupAuthHandlers(socket) {
     console.log(`🔐 Setting up auth handlers for socket ${socket.id}`);
 
     // If user is already pre-authenticated, emit success immediately
-    if (socket.user) {
+    if (socket.user && socket.handshake_authenticated) {
         console.log(`🔐 Emitting success for pre-authenticated user: ${socket.user.user_name}`);
         socket.emit(AUTH_EVENTS.SUCCESS, {
             success: true,
             message: 'Xác thực thành công',
-            user_role: socket.user.user_role
+            user_role: socket.user.user_role,
+            authenticated_via: 'handshake'
         });
     }
 
     // Handle authentication requests (for fallback/re-auth)
     socket.on('authenticate', async (data) => {
         const { token } = data;
+        
+        // If already authenticated during handshake, avoid duplicate authentication
+        if (socket.handshake_authenticated && socket.user) {
+            console.log(`⚠️ Ignoring duplicate auth attempt for ${socket.user.user_name}, already authenticated via handshake`);
+            socket.emit(AUTH_EVENTS.SUCCESS, {
+                success: true,
+                message: 'Đã xác thực trước đó',
+                user_role: socket.user.user_role,
+                authenticated_via: 'handshake'
+            });
+            return;
+        }
+        
         await authenticateWebsocketUser(socket, token);
     });
 

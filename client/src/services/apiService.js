@@ -29,7 +29,7 @@
  * // Development: "http://localhost:5000"
  * // Production: process.env.REACT_APP_API_URL value
  */
-const get_api_base_url = () => {
+const getApiBaseUrl = () => {
 	if (process.env.REACT_APP_API_URL) {
 		return process.env.REACT_APP_API_URL;
 	}
@@ -41,7 +41,7 @@ const get_api_base_url = () => {
  * Base URL for all API calls
  * @constant {string}
  */
-const API_BASE_URL = get_api_base_url();
+const API_BASE_URL = getApiBaseUrl();
 
 /**
  * Centralized API call function with comprehensive error handling
@@ -62,16 +62,16 @@ const API_BASE_URL = get_api_base_url();
  *
  * @example
  * // GET request
- * const users = await api_call('/api/admin/accounts/get_all_users');
+ * const users = await apiCall('/api/admin/accounts/get_all_users');
  *
  * @example
  * // POST request with data
- * const result = await api_call('/api/users/login', {
+ * const result = await apiCall('/api/users/login', {
  *     method: 'POST',
  *     body: JSON.stringify({ user_name: 'admin', password: 'password123' })
  * });
  */
-const api_call = async (endpoint, options = {}) => {
+const apiCall = async (endpoint, options = {}) => {
 	try {
 		const response = await fetch(`${API_BASE_URL}${endpoint}`, {
 			credentials: "include", // Include HTTP-only cookies for JWT authentication
@@ -112,7 +112,7 @@ const api_call = async (endpoint, options = {}) => {
  * const health = await check_server_health();
  * console.log(`Server status: ${health.success ? 'Online' : 'Offline'}`);
  */
-export const check_server_health = () => api_call("/api/health");
+export const checkServerHealth = () => apiCall("/api/health");
 
 /**
  * Gets the WebSocket URL for real-time features
@@ -123,9 +123,9 @@ export const check_server_health = () => api_call("/api/health");
  * @returns {string} WebSocket URL for Socket.io connection
  *
  * @example
- * const socket = io(get_socket_url());
+ * const socket = io(getSocketUrl());
  */
-export const get_socket_url = () => {
+export const getSocketUrl = () => {
 	return process.env.REACT_APP_WS_URL || "http://localhost:5000";
 };
 
@@ -140,14 +140,14 @@ export const get_socket_url = () => {
  *
  * @example
  * // Get secure token for WebSocket authentication
- * const token = await get_auth_token();
+ * const token = await getAuthToken();
  * if (token) {
  *     socket.emit('authenticate', { token });
  * }
  */
-export const get_auth_token = async () => {
+export const getAuthToken = async () => {
 	try {
-		const response = await api_call("/api/users/websocket-token", {
+		const response = await apiCall("/api/users/websocket-token", {
 			method: "POST",
 			credentials: "include",
 		});
@@ -176,15 +176,15 @@ export const get_auth_token = async () => {
  *
  * @example
  * // Renew WebSocket token
- * const renewal = await renew_auth_token();
+ * const renewal = await renewAuthToken();
  * if (renewal && renewal.websocket_token) {
  *     // Update WebSocket connection with new token
  *     socket.emit('renew_token', { new_token: renewal.websocket_token });
  * }
  */
-export const renew_auth_token = async () => {
+export const renewAuthToken = async () => {
 	try {
-		const response = await api_call("/api/users/renew-websocket-token", {
+		const response = await apiCall("/api/users/renew-websocket-token", {
 			method: "POST",
 			credentials: "include",
 		});
@@ -234,7 +234,7 @@ export const renew_auth_token = async () => {
  */
 export const login = async (user_data) => {
 	try {
-		const response = await api_call("/api/users/login", {
+		const response = await apiCall("/api/users/login", {
 			method: "POST",
 			body: JSON.stringify(user_data),
 			credentials: "include",
@@ -267,7 +267,7 @@ export const login = async (user_data) => {
  */
 export const logout = async () => {
 	try {
-		const response = await api_call("/api/users/logout", {
+		const response = await apiCall("/api/users/logout", {
 			method: "POST",
 		});
 
@@ -307,7 +307,7 @@ export const logout = async () => {
  */
 export const checkAuth = async () => {
 	try {
-		const response = await api_call("/api/users/me", {
+		const response = await apiCall("/api/users/me", {
 			method: "POST",
 			credentials: "include",
 		});
@@ -348,7 +348,7 @@ export const checkAuth = async () => {
  * // In ManageUserPage.jsx
  * const load_users = async () => {
  *     try {
- *         const response = await get_all_users();
+ *         const response = await getAllUsers();
  *         if (response.success) {
  *             setUsers(response.users);
  *         }
@@ -357,8 +357,8 @@ export const checkAuth = async () => {
  *     }
  * };
  */
-export const get_all_users = () =>
-	api_call("/api/admin/accounts/get_all_users");
+export const getAllUsers = () =>
+	apiCall("/api/admin/accounts/get_all_users");
 
 /**
  * Creates a new user account in the system
@@ -385,7 +385,7 @@ export const get_all_users = () =>
  *
  * @example
  * // Create new student account
- * const result = await create_user({
+ * const result = await createUser({
  *     user_name: 'student123',
  *     email: 'student@example.com',
  *     full_name: 'Nguyễn Văn A',
@@ -402,8 +402,8 @@ export const get_all_users = () =>
  *     alert('Email đã được sử dụng!');
  * }
  */
-export const create_user = (user_data) =>
-	api_call("/api/admin/accounts/create-new-account", {
+export const createUser = (user_data) =>
+	apiCall("/api/admin/accounts/create-new-account", {
 		method: "POST",
 		body: JSON.stringify(user_data),
 	}
@@ -445,35 +445,151 @@ export const create_user = (user_data) =>
 export const getAllExams = (filters = {}) => {
 	const query_params = new URLSearchParams(filters).toString();
 	const endpoint = `/api/exams${query_params ? `?${query_params}` : ""}`;
-	return api_call(endpoint);
+	return apiCall(endpoint);
+};
+
+/**
+ * Get a single exam by ID
+ *
+ * Retrieves detailed information about a specific exam including
+ * room and subject details.
+ *
+ * @param {number|string} exam_id - The exam ID to retrieve
+ * @returns {Promise<Object>} Exam details response
+ * @returns {boolean} returns.success - Whether the request was successful
+ * @returns {Object} returns.data - Exam object with full details
+ *
+ * @example
+ * const exam = await getExamById(123);
+ * if (exam.success) {
+ *     console.log('Exam details:', exam.data);
+ * }
+ */
+export const getExamById = (exam_id) => {
+	return apiCall(`/api/exams/${exam_id}`);
+};
+
+/**
+ * Create a new exam
+ *
+ * Creates a new exam with the provided data. Requires admin privileges.
+ * Validates room availability and time conflicts automatically.
+ *
+ * @param {Object} exam_data - Exam data object
+ * @param {string} exam_data.title - Exam title
+ * @param {string} exam_data.subject_code - Subject code
+ * @param {string} exam_data.exam_date - Exam date (YYYY-MM-DD format)
+ * @param {string} exam_data.start_time - Start time (HH:MM format)
+ * @param {string} exam_data.end_time - End time (HH:MM format)
+ * @param {number} exam_data.duration_minutes - Duration in minutes
+ * @param {string} exam_data.method - Exam method (online, offline, hybrid)
+ * @param {string} [exam_data.description] - Optional exam description
+ * @param {number} [exam_data.max_students] - Maximum number of students
+ * @param {number} [exam_data.room_id] - Room ID for offline/hybrid exams
+ * @param {string} [exam_data.status] - Exam status (default: draft)
+ * @param {string} [exam_data.grade_level] - Grade level
+ * @param {number} [exam_data.class_id] - Class ID if exam is for specific class
+ * @returns {Promise<Object>} Creation response
+ * @returns {boolean} returns.success - Whether the creation was successful
+ * @returns {Object} returns.data - Created exam object
+ * @returns {string} returns.message - Success or error message
+ *
+ * @example
+ * const new_exam = await createExam({
+ *     title: 'Kiểm tra Toán học Kỳ 1',
+ *     subject_code: 'MATH',
+ *     exam_date: '2024-03-15',
+ *     start_time: '08:00',
+ *     end_time: '10:00',
+ *     duration_minutes: 120,
+ *     method: 'offline',
+ *     room_id: 1,
+ *     max_students: 30
+ * });
+ */
+export const createExam = (exam_data) => {
+	return apiCall('/api/exams', {
+		method: 'POST',
+		body: JSON.stringify(exam_data),
+	});
+};
+
+/**
+ * Update an existing exam
+ *
+ * Updates exam data with the provided fields. Only provided fields
+ * will be updated. Requires admin privileges.
+ *
+ * @param {number|string} exam_id - The exam ID to update
+ * @param {Object} exam_data - Exam data object with fields to update
+ * @returns {Promise<Object>} Update response
+ * @returns {boolean} returns.success - Whether the update was successful
+ * @returns {Object} returns.data - Updated exam object
+ * @returns {string} returns.message - Success or error message
+ *
+ * @example
+ * const updated_exam = await updateExam(123, {
+ *     title: 'Updated Exam Title',
+ *     room_id: 2,
+ *     max_students: 25
+ * });
+ */
+export const updateExam = (exam_id, exam_data) => {
+	return apiCall(`/api/exams/${exam_id}`, {
+		method: 'PUT',
+		body: JSON.stringify(exam_data),
+	});
+};
+
+/**
+ * Delete an exam
+ *
+ * Deletes an exam permanently. Cannot delete exams that have
+ * student registrations. Requires admin privileges.
+ *
+ * @param {number|string} exam_id - The exam ID to delete
+ * @returns {Promise<Object>} Deletion response
+ * @returns {boolean} returns.success - Whether the deletion was successful
+ * @returns {string} returns.message - Success or error message
+ *
+ * @example
+ * const result = await deleteExam(123);
+ * if (result.success) {
+ *     console.log('Exam deleted successfully');
+ * }
+ */
+export const deleteExam = (exam_id) => {
+	return apiCall(`/api/exams/${exam_id}`, {
+		method: 'DELETE',
+	});
 };
 
 // ============================================================================
 // SUBJECT MANAGEMENT (Admin Role Partially Required)
 // ============================================================================
 
-export const get_all_subjects = (filters = {}) => {
+export const getAllSubjects = (filters = {}) => {
 	const query_params = new URLSearchParams(filters).toString();
 	const endpoint = `/api/subjects${query_params ? `?${query_params}` : ""}`;
-	return api_call(endpoint, { method: "GET" });
+	return apiCall(endpoint, { method: "GET" });
 };
 
-export const add_new_subject = (subject_data) =>
-	api_call("/api/subjects", {
+export const addNewSubject = (subject_data) =>
+	apiCall("/api/subjects", {
 		method: "POST",
 		body: JSON.stringify(subject_data),
 	}
 );
 
-export const update_subject = (subject_id, subject_data) =>
-	api_call(`/api/subjects/${subject_id}`, {
+export const updateSubject = (subject_id, subject_data) =>
+	apiCall(`/api/subjects/${subject_id}`, {
 		method: "PUT",
 		body: JSON.stringify(subject_data),
 	}
 );
 
-export const delete_subject = (subject_id) =>
-	api_call(`/api/subjects/${subject_id}`, {
+export const deleteSubject = (subject_id) =>
+	apiCall(`/api/subjects/${subject_id}`, {
 		method: "DELETE",
 	}
 );
@@ -514,7 +630,7 @@ export const delete_subject = (subject_id) =>
 export const getUserNotifications = (filters = {}) => {
 	const query_params = new URLSearchParams(filters).toString();
 	const endpoint = `/api/notifications${query_params ? `?${query_params}` : ""}`;
-	return api_call(endpoint, { method: "GET" });
+	return apiCall(endpoint, { method: "GET" });
 };
 
 /**
@@ -536,7 +652,7 @@ export const getUserNotifications = (filters = {}) => {
  * }
  */
 export const markNotificationsAsRead = (notification_ids) =>
-	api_call("/api/notifications/mark-read", {
+	apiCall("/api/notifications/mark-read", {
 		method: "PUT",
 		body: JSON.stringify({ notification_ids }),
 	}
@@ -560,7 +676,7 @@ export const markNotificationsAsRead = (notification_ids) =>
  * }
  */
 export const markAllNotificationsAsRead = () =>
-	api_call("/api/notifications/mark-all-read", {
+	apiCall("/api/notifications/mark-all-read", {
 		method: "PUT",
 	}
 );
@@ -589,7 +705,7 @@ export const markAllNotificationsAsRead = () =>
  * });
  */
 export const createNotification = (notification_data) =>
-	api_call("/api/notifications", {
+	apiCall("/api/notifications", {
 		method: "POST",
 		body: JSON.stringify(notification_data),
 	}
@@ -613,7 +729,7 @@ export const createNotification = (notification_data) =>
  * }
  */
 export const deleteNotification = (notification_id) =>
-	api_call(`/api/notifications/${notification_id}`, {
+	apiCall(`/api/notifications/${notification_id}`, {
 		method: "DELETE",
 	});
 
@@ -646,23 +762,23 @@ export const deleteNotification = (notification_id) =>
  * 
  * @example
  * // Get all rooms
- * const result = await get_all_rooms();
+ * const result = await getAllRooms();
  * if (result.success) {
  *     console.log('Found', result.rooms.length, 'rooms');
  * }
  * 
  * @example
  * // Get active rooms with computers in building A
- * const result = await get_all_rooms({
+ * const result = await getAllRooms({
  *     building: 'Tòa nhà A',
  *     is_active: true,
  *     has_computers: true
  * });
  */
-export const get_all_rooms = (filters = {}) => {
+export const getAllRooms = (filters = {}) => {
 	const query_params = new URLSearchParams(filters).toString();
 	const endpoint = `/api/rooms/get-all-rooms${query_params ? `?${query_params}` : ""}`;
-	return api_call(endpoint, { method: "GET" });
+	return apiCall(endpoint, { method: "GET" });
 };
 
 /**
@@ -691,7 +807,7 @@ export const get_all_rooms = (filters = {}) => {
  * 
  * @example
  * // Create new room
- * const result = await create_room({
+ * const result = await createRoom({
  *     room_name: 'Phòng A1',
  *     building: 'Tòa nhà A',
  *     floor: 1,
@@ -704,8 +820,8 @@ export const get_all_rooms = (filters = {}) => {
  *     console.log('Room created:', result.room);
  * }
  */
-export const create_room = (room_data) =>
-	api_call("/api/rooms/create-room", {
+export const createRoom = (room_data) =>
+	apiCall("/api/rooms/create-room", {
 		method: "POST",
 		body: JSON.stringify(room_data),
 	});
@@ -738,7 +854,7 @@ export const create_room = (room_data) =>
  * 
  * @example
  * // Update room capacity and features
- * const result = await update_room(1, {
+ * const result = await updateRoom(1, {
  *     capacity: 45,
  *     features: 'Máy chiếu, Điều hòa, Wifi, Bảng thông minh'
  * });
@@ -747,8 +863,8 @@ export const create_room = (room_data) =>
  *     console.log('Room updated:', result.room);
  * }
  */
-export const update_room = (room_id, room_data) =>
-	api_call(`/api/rooms/update-room/${room_id}`, {
+export const updateRoom = (room_id, room_data) =>
+	apiCall(`/api/rooms/update-room/${room_id}`, {
 		method: "PUT",
 		body: JSON.stringify(room_data),
 	});
@@ -772,15 +888,15 @@ export const update_room = (room_id, room_data) =>
  * 
  * @example
  * // Delete room
- * const result = await delete_room(5);
+ * const result = await deleteRoom(5);
  * if (result.success) {
  *     console.log('Room deleted successfully');
  * } else {
  *     console.error('Failed to delete room:', result.message);
  * }
  */
-export const delete_room = (room_id) =>
-	api_call(`/api/rooms/delete-room/${room_id}`, {
+export const deleteRoom = (room_id) =>
+	apiCall(`/api/rooms/delete-room/${room_id}`, {
 		method: "DELETE",
 	});
 
@@ -807,7 +923,7 @@ export const delete_room = (room_id) =>
  * 
  * @example
  * // Get room exam status
- * const result = await get_room_exam_status(1);
+ * const result = await getRoomExamStatus(1);
  * if (result.success) {
  *     const { status, status_text, current_exam } = result.exam_status;
  *     if (status === 'in_exam') {
@@ -815,7 +931,7 @@ export const delete_room = (room_id) =>
  *     }
  * }
  */
-export const get_room_exam_status = (room_id) =>
-	api_call(`/api/rooms/exam-status/${room_id}`, {
+export const getRoomExamStatus = (room_id) =>
+	apiCall(`/api/rooms/exam-status/${room_id}`, {
 		method: "GET",
 	});

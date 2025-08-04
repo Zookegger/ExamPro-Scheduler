@@ -64,7 +64,7 @@ function emit_room_exam_status_change(room_id, status_info) {
  * exam schedule and status. Returns detailed exam information if active.
  * 
  * @async
- * @function get_room_exam_status
+ * @function getRoomExamStatus
  * @param {number} room_id - ID of the room to check
  * @returns {Promise<Object>} Room exam status information
  * @returns {string} returns.status - 'available', 'in_exam', 'scheduled'
@@ -72,7 +72,7 @@ function emit_room_exam_status_change(room_id, status_info) {
  * @returns {Array} [returns.upcoming_exams] - Upcoming exams in the next 24 hours
  * 
  * @example
- * const status = await get_room_exam_status(1);
+ * const status = await getRoomExamStatus(1);
  * // Returns:
  * {
  *   status: 'in_exam',
@@ -86,7 +86,7 @@ function emit_room_exam_status_change(room_id, status_info) {
  *   upcoming_exams: []
  * }
  */
-async function get_room_exam_status(room_id) {
+async function getRoomExamStatus(room_id) {
     try {
         const now = new Date();
         const today = now.toISOString().split('T')[0]; // YYYY-MM-DD format
@@ -189,7 +189,7 @@ async function get_room_exam_status(room_id) {
  * by building, status, capacity, and computer availability.
  * 
  * @async
- * @function get_all_rooms
+ * @function getAllRooms
  * @param {Object} req - Express request object
  * @param {Object} req.query - Query parameters for filtering
  * @param {string} [req.query.building] - Filter by building name
@@ -220,7 +220,7 @@ async function get_room_exam_status(room_id) {
  *   "message": "Rooms retrieved successfully"
  * }
  */
-async function get_all_rooms(req, res) {
+async function getAllRooms(req, res) {
     try {
         console.log('📋 Getting all rooms with filters:', req.query);
         
@@ -256,7 +256,7 @@ async function get_all_rooms(req, res) {
         // Add exam status to each room
         const rooms_with_status = await Promise.all(
             rooms.map(async (room) => {
-                const exam_status = await get_room_exam_status(room.room_id);
+                const exam_status = await getRoomExamStatus(room.room_id);
                 return {
                     ...room.toJSON(),
                     exam_status: exam_status
@@ -289,7 +289,7 @@ async function get_all_rooms(req, res) {
  * and ensures room names are unique within the same building.
  * 
  * @async
- * @function create_room
+ * @function createRoom
  * @param {Object} req - Express request object
  * @param {Object} req.body - Room data
  * @param {string} req.body.room_name - Room name/number (required)
@@ -321,7 +321,7 @@ async function get_all_rooms(req, res) {
  *   "message": "Phòng đã được tạo thành công"
  * }
  */
-async function create_room(req, res) {
+async function createRoom(req, res) {
     try {
         console.log('🏗️ Creating new room:', req.body);
         
@@ -417,7 +417,7 @@ async function create_room(req, res) {
  * that room names remain unique within buildings.
  * 
  * @async
- * @function update_room
+ * @function updateRoom
  * @param {Object} req - Express request object
  * @param {Object} req.params - URL parameters
  * @param {string} req.params.room_id - ID of room to update
@@ -440,7 +440,7 @@ async function create_room(req, res) {
  *   "message": "Phòng đã được cập nhật thành công"
  * }
  */
-async function update_room(req, res) {
+async function updateRoom(req, res) {
     try {
         const { room_id } = req.params;
         console.log('✏️ Updating room:', room_id, 'with data:', req.body);
@@ -515,7 +515,7 @@ async function update_room(req, res) {
         emit_room_table_update('update', updated_room, req.user);
         
         // Check and emit exam status change if needed
-        const exam_status = await get_room_exam_status(room_id);
+        const exam_status = await getRoomExamStatus(room_id);
         emit_room_exam_status_change(room_id, exam_status);
         
         res.json({
@@ -551,7 +551,7 @@ async function update_room(req, res) {
  * the room is not currently assigned to any active exams.
  * 
  * @async
- * @function delete_room
+ * @function deleteRoom
  * @param {Object} req - Express request object
  * @param {Object} req.params - URL parameters
  * @param {string} req.params.room_id - ID of room to delete
@@ -566,7 +566,7 @@ async function update_room(req, res) {
  *   "message": "Phòng đã được xóa thành công"
  * }
  */
-async function delete_room(req, res) {
+async function deleteRoom(req, res) {
     try {
         const { room_id } = req.params;
         console.log('🗑️ Deleting room:', room_id);
@@ -582,7 +582,7 @@ async function delete_room(req, res) {
         }
         
         // Safety check for active exams using this room
-        const exam_status = await get_room_exam_status(room_id);
+        const exam_status = await getRoomExamStatus(room_id);
         
         if (exam_status.status === 'in_exam') {
             return res.status(400).json({
@@ -639,11 +639,11 @@ async function delete_room(req, res) {
 }
 
 module.exports = {
-    get_all_rooms,
-    get_room_exam_status,
-    create_room,
-    update_room,
-    delete_room,
+    getAllRooms,
+    getRoomExamStatus,
+    createRoom,
+    updateRoom,
+    deleteRoom,
     set_websocket_io,
     emit_room_table_update,
     emit_room_exam_status_change

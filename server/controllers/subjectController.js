@@ -95,7 +95,7 @@ async function getAllSubjects(req, res, next) {
 }
 
 async function addNewSubject(req, res, next) {
-    const transaction = await utility.sequelize.transaction();
+    const transaction = await db.utility.sequelize.transaction();
     
     try {
         if (req.user.user_role !== ADMIN_ROLE) {
@@ -146,7 +146,7 @@ async function addNewSubject(req, res, next) {
 }
 
 async function updateSubject(req, res, next) {
-    const transaction = await utility.sequelize.transaction();
+    const transaction = await db.utility.sequelize.transaction();
     
     try {
         if (req.user.user_role !== ADMIN_ROLE) {
@@ -232,7 +232,7 @@ async function updateSubject(req, res, next) {
 }
 
 async function deleteSubject(req, res, next) {
-    const transaction = await utility.sequelize.transaction();
+    const transaction = await db.utility.sequelize.transaction();
     
     try {
         if (req.user.user_role !== ADMIN_ROLE) {

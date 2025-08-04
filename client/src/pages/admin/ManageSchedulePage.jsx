@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useMemo} from 'react';
 import Breadcrumb from '../../components/Breadcrumb';
-import { io } from 'socket.io-client';
+import useWebsocketConnection from '../../hooks/use_websocket_connection';
 
 function ManageSchedulePage() {
     // ====================================================================
@@ -17,16 +17,10 @@ function ManageSchedulePage() {
     // Data states
     const [unregistered_students, set_unregistered_students] = useState([]);
     const [unassigned_proctors, set_unassigned_proctors] = useState([]);
-    const [student_list, set_student_list] = useState([]);
-    const [proctor_list, set_proctor_list] = useState([]);
     
     // UI states
     const [is_loading, set_is_loading] = useState(false);
     const [show_student_list, set_show_student_list] = useState(false);
-    
-    // WebSocket states
-    const [socket, set_socket] = useState(null);
-    const [connection_status, set_connection_status] = useState('disconnected');
 
     // ====================================================================
     // HELPER FUNCTIONS
@@ -44,44 +38,37 @@ function ManageSchedulePage() {
     // ====================================================================
     // EFFECTS - WEBSOCKET CONNECTION
     // ====================================================================
+    const handle_student_assignment_update = useCallback((data) => {
+        console.log('📊 Student assignment updated:', data);
+        set_unregistered_students(data.unregistered_students || []);
+        set_unassigned_proctors(data.unassigned_proctors || []);
+    }, []);
+
+    const handle_assignment_notification = useCallback((notification) => {
+        console.log('🔔 New assignment notification:', notification);
+    }, []);
+
+    const ws_events = useMemo(() => ({
+        student_assignment_update: handle_student_assignment_update,
+        assignment_notification: handle_assignment_notification
+    }), [handle_student_assignment_update, handle_assignment_notification]);
+
+    const { 
+        connection_status, 
+        emit_event, 
+        is_connected 
+    } = useWebsocketConnection({
+        events: ws_events,
+        debug: true
+    });
+    
+    // Request initial stats when connected
     useEffect(() => {
-        console.log('🔌 Initializing WebSocket connection...');
-        
-        // Create WebSocket connection
-        const new_socket = io('http://localhost:5000');
-        set_socket(new_socket);
-
-        // Connection event handlers
-        new_socket.on('connect', () => {
-            console.log('✅ Connected to WebSocket server');
-            set_connection_status('connected');
-        });
-
-        new_socket.on('disconnect', () => {
-            console.log('❌ Disconnected from WebSocket server'); 
-            set_connection_status('disconnected');
-        });
-
-        // TODO: Add custom events here
-        new_socket.on('student_assignment_update', (data) => {
-            console.log('📊 Student assignment updated:', data);
-            set_unregistered_students(data.unregistered_students || []);
-            set_unassigned_proctors(data.unassigned_proctors || []);
-        });
-
-        new_socket.on('assignment_notification', (notification) => {
-            console.log('🔔 New assignment notification:', notification);
-        });
-
-        // Request initial stats when connected
-        new_socket.emit('request_live_stats');
-
-        // Cleanup on component unmount
-        return () => {
-            console.log('🧹 Cleaning up WebSocket connection');
-            new_socket.disconnect();
-        };
-    }, []); // Run once on component mount
+        if (is_connected) {
+            // Request initial stats when connected
+            emit_event('request_live_stats');
+        }
+    }, [is_connected, emit_event]);
 
     // ====================================================================
     // EFFECTS - INITIAL DATA LOADING

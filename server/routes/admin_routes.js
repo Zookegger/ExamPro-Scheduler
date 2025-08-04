@@ -225,7 +225,7 @@ diagnose_router.get('/table-status', async (req, res, next) => {
  * }
  */
 diagnose_router.delete('/clear-test-data', async (req, res, next) => {
-    const transaction = await db.sequelize.transaction();
+    const transaction = await utility.sequelize.transaction();
     
     try {
         console.log('🗑️ Starting test data cleanup...');
@@ -471,7 +471,7 @@ const account_router = express.Router();
  * }
  */
 account_router.post('/create-new-account', authenticate_jwt, require_admin_role, async (req, res, next) => {
-    const transaction = await db.sequelize.transaction();
+    const transaction = await utility.sequelize.transaction();
     
     try {
         const new_user_data = req.body;
@@ -599,7 +599,7 @@ account_router.post('/create-new-account', authenticate_jwt, require_admin_role,
  * }
  */
 account_router.post('/edit-account', authenticate_jwt, require_admin_role, async (req, res, next) => {
-    const transaction = await db.sequelize.transaction();
+    const transaction = await utility.sequelize.transaction();
     
     try {
         const { user_id } = req.params;

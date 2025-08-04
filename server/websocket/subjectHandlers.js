@@ -1,6 +1,7 @@
 const { models } = require('../models');
 const { User, Notification } = models;
 const { requireAdminPermission } = require('./authorizationHandlers');
+const db = require('../models');
 
 // Subject event constants
 const SUBJECT_EVENTS = {
@@ -77,8 +78,13 @@ class SubjectHandler {
 
                 const created_notifications = await Notification.bulkCreate(notifications_to_create, { transaction });
 
-                // Emit real-time notifications to connected users
+                // Emit real-time notifications to connected users (exclude the creator)
                 notification_recipients.forEach((user, index) => {
+                    // Double-check: Don't send notification to the creator
+                    if (user.user_id === admin_info?.user_id) {
+                        return; // Skip this user
+                    }
+                    
                     const notification_data = {
                         notification_id: created_notifications[index].notification_id,
                         title: message_info.title,
@@ -121,7 +127,7 @@ class SubjectHandler {
 
     async handleCreated(data, socket) {
         // Start database transaction for notification consistency
-        const transaction = await models.sequelize.transaction();
+        const transaction = await db.utility.sequelize.transaction();
         
         try {
             // 🔐 Authorization check - only admins can trigger subject operations
@@ -144,8 +150,8 @@ class SubjectHandler {
                 return;
             }
 
-            // Emit table update for real-time UI updates to ALL connected clients
-            this.io.emit(SUBJECT_EVENTS.TABLE_UPDATE, {
+            // Emit table update for real-time UI updates to OTHER connected clients (exclude the creator)
+            socket.broadcast.emit(SUBJECT_EVENTS.TABLE_UPDATE, {
                 action: 'create',
                 subject: subject_data,
                 timestamp: new Date().toISOString(),
@@ -180,7 +186,7 @@ class SubjectHandler {
 
     async handleUpdated(data, socket) {
         // Start database transaction for notification consistency
-        const transaction = await models.sequelize.transaction();
+        const transaction = await db.utility.sequelize.transaction();
         
         try {
             // 🔐 Authorization check - only admins can trigger subject operations
@@ -203,8 +209,8 @@ class SubjectHandler {
                 return;
             }
 
-            // Emit table update for real-time UI updates to ALL connected clients
-            this.io.emit(SUBJECT_EVENTS.TABLE_UPDATE, {
+            // Emit table update for real-time UI updates to OTHER connected clients (exclude the creator)
+            socket.broadcast.emit(SUBJECT_EVENTS.TABLE_UPDATE, {
                 action: 'update',
                 subject: subject_data,
                 timestamp: new Date().toISOString(),
@@ -239,7 +245,7 @@ class SubjectHandler {
 
     async handleDeleted(data, socket) {
         // Start database transaction for notification consistency
-        const transaction = await models.sequelize.transaction();
+        const transaction = await db.utility.sequelize.transaction();
         
         try {
             // 🔐 Authorization check - only admins can trigger subject operations
@@ -262,8 +268,8 @@ class SubjectHandler {
                 return;
             }
 
-            // Emit table update for real-time UI updates to ALL connected clients
-            this.io.emit(SUBJECT_EVENTS.TABLE_UPDATE, {
+            // Emit table update for real-time UI updates to OTHER connected clients (exclude the creator)
+            socket.broadcast.emit(SUBJECT_EVENTS.TABLE_UPDATE, {
                 action: 'delete',
                 subject: subject_data,
                 timestamp: new Date().toISOString(),

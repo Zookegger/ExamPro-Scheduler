@@ -61,23 +61,12 @@ async function login(user_name, password, res) {
 			where: { user_name },
 		});
 
-		if (!user) {
-			return res.status(401).json({
-				success: false,
-				message: "Tài khoản không tồn tại",
-			});
-		}
-
-		const is_password_valid = await user.checkPassword(password);
-
-		if (!is_password_valid) {
+		if (!user | !(await user.checkPassword(password))) {
 			return res.json({
 				success: false,
-				message: "Mật khẩu không chính xác",
+				message: "Tên tài khoản hoặc mật khẩu không đúng"
 			});
 		}
-
-        console.log(user.user_name);
 
         const payload = {
             user_id: user.user_id,

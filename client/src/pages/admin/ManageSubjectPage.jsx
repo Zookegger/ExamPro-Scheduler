@@ -24,10 +24,10 @@
 import React, { useState, useEffect } from 'react';
 import Breadcrumb from '../../components/Breadcrumb';
 import { 
-    add_new_subject, 
-    delete_subject, 
-    get_all_subjects, 
-    update_subject,
+    addNewSubject, 
+    deleteSubject, 
+    getAllSubjects, 
+    updateSubject,
 } from '../../services/apiService';
 import useWebsocketConnection from '../../hooks/use_websocket_connection';
 
@@ -101,7 +101,7 @@ function ManageSubjectPage({ current_user, current_user_role }) {
     const load_subjects = async () => {
         try {
             set_loading(true);
-            const result = await get_all_subjects();
+            const result = await getAllSubjects();
             // Extract the subjects array from the response
             set_subjects(result.subjects || []);
         } catch (error) {
@@ -190,7 +190,7 @@ function ManageSubjectPage({ current_user, current_user_role }) {
             if (modal_mode === 'create') {
                 console.log('Creating subject:', form_data);
                 
-                const result = await add_new_subject(form_data);
+                const result = await addNewSubject(form_data);
                 if (result.success) {
                     // Emit to other admins via WebSocket
                     emit_event('subject_created', {
@@ -208,7 +208,7 @@ function ManageSubjectPage({ current_user, current_user_role }) {
             } else if (modal_mode === 'edit') {
                 console.log('Updating subject:', selected_subject.subject_id, form_data);
                 
-                const result = await update_subject(selected_subject.subject_id, form_data);
+                const result = await updateSubject(selected_subject.subject_id, form_data);
                 if (result.success) {
                     // Emit to other admins via WebSocket
                     emit_event('subject_updated', {
@@ -237,7 +237,8 @@ function ManageSubjectPage({ current_user, current_user_role }) {
             console.log('Deleting subject:', selected_subject.subject_id);
             
             // TODO: Replace with actual API call
-            const result = await delete_subject(selected_subject.subject_id);
+            const result = await deleteSubject(selected_subject.subject_id);
+            
             if (result.success) {
                 // Emit to other admins via WebSocket
                 emit_event('subject_deleted', {

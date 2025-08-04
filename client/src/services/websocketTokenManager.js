@@ -18,7 +18,7 @@
  * - Vietnamese error messages for user-facing content
  */
 
-import { renew_auth_token } from './apiService';
+import { renewAuthToken } from './apiService';
 
 class WebSocketTokenManager {
     constructor() {
@@ -137,7 +137,7 @@ class WebSocketTokenManager {
         console.log(`🔄 Attempting to renew WebSocket token (attempt ${this.retry_count + 1}/${this.max_retry_attempts})`);
 
         try {
-            const response = await renew_auth_token();
+            const response = await renewAuthToken();
 
             if (response && response.success && response.websocket_token) {
                 // Update token information
