@@ -139,6 +139,14 @@ function RoleBasedNavigation({
                                     <i className="bi bi-journal-text me-1"></i>
                                     Môn học của tôi
                                 </Link>
+                                <Link className="nav-link" to="/teacher/manage-class">
+                                    <i className="bi bi-people me-1"></i>
+                                    Quản lý lớp
+                                </Link>
+                                <Link className="nav-link" to="/teacher/schedule">
+                                    <i className="bi bi-calendar-week me-1"></i>
+                                    Lịch công tác
+                                </Link>
                                 <Link className="nav-link" to="/teacher/exam-proctor">
                                     <i className="bi bi-eye me-1"></i>
                                     Giám thị thi

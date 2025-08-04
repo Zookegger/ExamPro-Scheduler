@@ -935,3 +935,101 @@ export const getRoomExamStatus = (room_id) =>
 	apiCall(`/api/rooms/exam-status/${room_id}`, {
 		method: "GET",
 	});
+
+// ============================================================================
+// SCHEDULE API FUNCTIONS
+// ============================================================================
+
+/**
+ * Get comprehensive schedule overview with statistics
+ * 
+ * @param {Object} filters - Optional filters for the schedule
+ * @param {string} [filters.start_date] - Start date filter (YYYY-MM-DD)
+ * @param {string} [filters.end_date] - End date filter (YYYY-MM-DD)
+ * @param {number} [filters.room_id] - Filter by room ID
+ * @param {string} [filters.subject_code] - Filter by subject code
+ * @param {boolean} [filters.include_stats=true] - Include statistics
+ * @returns {Promise<Object>} Response with schedule data and statistics
+ */
+export const getScheduleOverview = (filters = {}) => {
+	const params = new URLSearchParams();
+	Object.entries(filters).forEach(([key, value]) => {
+		if (value !== undefined && value !== '' && value !== 'all') {
+			params.append(key, value);
+		}
+	});
+	
+	const endpoint = `/api/schedule/overview${params.toString() ? `?${params.toString()}` : ''}`;
+	return apiCall(endpoint, { method: "GET" });
+};
+
+/**
+ * Get students and proctors not assigned to any published exams
+ * 
+ * @returns {Promise<Object>} Response with unassigned data
+ */
+export const getUnassignedData = () =>
+	apiCall("/api/schedule/unassigned", {
+		method: "GET",
+	});
+
+/**
+ * Assign multiple students to an exam
+ * 
+ * @param {number} exam_id - ID of the exam
+ * @param {Array<number>} student_ids - Array of student IDs to assign
+ * @param {string} [registration_status='approved'] - Status for the registrations
+ * @returns {Promise<Object>} Response with assignment results
+ */
+export const assignStudentsToExam = (exam_id, student_ids, registration_status = 'approved') =>
+	apiCall("/api/schedule/assign-students", {
+		method: "POST",
+		body: JSON.stringify({
+			exam_id,
+			student_ids,
+			registration_status
+		})
+	});
+
+/**
+ * Assign multiple proctors to an exam
+ * 
+ * @param {number} exam_id - ID of the exam
+ * @param {Array<Object>} proctor_assignments - Array of proctor assignment objects
+ * @param {number} proctor_assignments[].proctor_id - ID of the proctor
+ * @param {string} [proctor_assignments[].role='assistant'] - Role of proctor
+ * @param {string} [proctor_assignments[].notes] - Optional notes
+ * @returns {Promise<Object>} Response with assignment results
+ */
+export const assignProctorsToExam = (exam_id, proctor_assignments) =>
+	apiCall("/api/schedule/assign-proctors", {
+		method: "POST",
+		body: JSON.stringify({
+			exam_id,
+			proctor_assignments
+		})
+	});
+
+/**
+ * Remove a student from an exam
+ * 
+ * @param {number} exam_id - ID of the exam
+ * @param {number} student_id - ID of the student to remove
+ * @returns {Promise<Object>} Response confirming removal
+ */
+export const removeStudentFromExam = (exam_id, student_id) =>
+	apiCall(`/api/schedule/remove-student/${exam_id}/${student_id}`, {
+		method: "DELETE",
+	});
+
+/**
+ * Remove a proctor from an exam
+ * 
+ * @param {number} exam_id - ID of the exam
+ * @param {number} proctor_id - ID of the proctor to remove
+ * @returns {Promise<Object>} Response confirming removal
+ */
+export const removeProctorFromExam = (exam_id, proctor_id) =>
+	apiCall(`/api/schedule/remove-proctor/${exam_id}/${proctor_id}`, {
+		method: "DELETE",
+	});

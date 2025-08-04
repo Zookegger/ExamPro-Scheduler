@@ -2,6 +2,14 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import AccessDeniedPage from "../common/AccessDeniedPage";
 import Breadcrumb from "../../components/Breadcrumb";
 import useWebsocketConnection from '../../hooks/use_websocket_connection';
+import { 
+    getAllExams, 
+    createExam, 
+    updateExam, 
+    deleteExam,
+    getAllSubjects,
+    getAllRooms
+} from '../../services/apiService';
 
 function ManageExamPage({ current_user_role }) {
     // ====================================================================
@@ -9,6 +17,8 @@ function ManageExamPage({ current_user_role }) {
     // ====================================================================
     // Exam data
     const [exams, set_exams] = useState([]);
+    const [subjects, set_subjects] = useState([]);
+    const [rooms, set_rooms] = useState([]);
     const [exam_stats, set_exam_stats] = useState({
         // Structure: exam_id -> { unregistered_student_ids: [], unassigned_proctor_ids: [] }
         // Example: 1: { unregistered_student_ids: [101, 102], unassigned_proctor_ids: [201] }
@@ -54,6 +64,17 @@ function ManageExamPage({ current_user_role }) {
             unregistered_student_count: stats.unregistered_student_ids?.length || 0,
             unassigned_proctor_count: stats.unassigned_proctor_ids?.length || 0
         };
+    }
+
+    function get_subject_name(subject_code) {
+        const subject = subjects.find(s => s.subject_code === subject_code);
+        return subject ? subject.subject_name : subject_code;
+    }
+
+    function get_room_name(room_id) {
+        if (!room_id) return 'Chưa phân phòng';
+        const room = rooms.find(r => r.room_id === parseInt(room_id));
+        return room ? room.room_name : `Phòng #${room_id}`;
     }
 
     // ====================================================================
@@ -102,50 +123,65 @@ function ManageExamPage({ current_user_role }) {
     // ====================================================================
     const handle_api_get_all_exams = async () => {
         try {
-            // TODO: Implement API call to get all exams
-            // const result = await get_all_exams();
-            console.log('📊 Fetching exams...');
+            console.log('📊 Fetching exams from API...');
+            const result = await getAllExams();
             
-            // Mock data for now - replace with actual API call
-            const mock_exams = [
-                {
-                    exam_id: 1,
-                    title: 'Kỳ thi Toán học giữa kỳ',
-                    subject_code: 'MATH101',
-                    exam_date: '2025-08-15',
-                    start_time: '09:00:00',
-                    end_time: '11:00:00',
-                    duration_minutes: 120,
-                    max_students: 30,
-                    status: 'published',
-                    room_id: 1
-                },
-                {
-                    exam_id: 2,
-                    title: 'Kỳ thi Vật lý cuối kỳ',
-                    subject_code: 'PHYS101',
-                    exam_date: '2025-08-20',
-                    start_time: '14:00:00',
-                    end_time: '16:00:00',
-                    duration_minutes: 120,
-                    max_students: 25,
-                    status: 'draft',
-                    room_id: 2
-                }
-            ];
-            
-            set_exams(mock_exams);
+            if (result.success) {
+                set_exams(result.data || []);
+                console.log('✅ Exams loaded successfully:', result.data?.length || 0, 'exams');
+            } else {
+                console.warn('⚠️ API returned no data');
+                set_exams([]);
+            }
         } catch (error) {
-            console.error('❌ API call error:', error);
+            console.error('❌ Failed to fetch exams:', error);
             set_exams([]);
+            set_error_message('Không thể tải danh sách kỳ thi');
         } finally {
             set_loading(false);
         }
     };
 
+    const handle_api_get_subjects = async () => {
+        try {
+            console.log('📚 Fetching subjects from API...');
+            const result = await getAllSubjects();
+            
+            if (result.success) {
+                set_subjects(result.subjects || []);
+                console.log('✅ Subjects loaded successfully:', result.subjects?.length || 0, 'subjects');
+            } else {
+                console.warn('⚠️ Subject API returned no data');
+                set_subjects([]);
+            }
+        } catch (error) {
+            console.error('❌ Failed to fetch subjects:', error);
+            set_subjects([]);
+        }
+    };
+
+    const handle_api_get_rooms = async () => {
+        try {
+            console.log('🏢 Fetching rooms from API...');
+            const result = await getAllRooms();
+            
+            if (result.success) {
+                set_rooms(result.rooms || []);
+                console.log('✅ Rooms loaded successfully:', result.rooms?.length || 0, 'rooms');
+            } else {
+                console.warn('⚠️ Room API returned no data');
+                set_rooms([]);
+            }
+        } catch (error) {
+            console.error('❌ Failed to fetch rooms:', error);
+            set_rooms([]);
+        }
+    };
+
     useEffect(() => {
         handle_api_get_all_exams();
-        // TODO: Also fetch subjects and rooms for dropdowns
+        handle_api_get_subjects();
+        handle_api_get_rooms();
     }, []);
 
     // Check if user has admin access
@@ -206,13 +242,24 @@ function ManageExamPage({ current_user_role }) {
     const handle_edit_exam = (exam) => {
         set_modal_mode('edit');
         set_selected_exam(exam);
+        
+        // Calculate end_time from start_time and duration_minutes if not provided
+        let calculated_end_time = exam.end_time;
+        if (!calculated_end_time && exam.start_time && exam.duration_minutes) {
+            const [hours, minutes] = exam.start_time.split(':').map(Number);
+            const start_date = new Date();
+            start_date.setHours(hours, minutes, 0, 0);
+            const end_date = new Date(start_date.getTime() + exam.duration_minutes * 60000);
+            calculated_end_time = end_date.toTimeString().slice(0, 5);
+        }
+        
         set_form_data({
             title: exam.title,
             subject_code: exam.subject_code,
             description: exam.description || '',
             exam_date: exam.exam_date,
             start_time: exam.start_time,
-            end_time: exam.end_time,
+            end_time: calculated_end_time,
             duration_minutes: exam.duration_minutes,
             max_students: exam.max_students,
             room_id: exam.room_id || '',
@@ -231,36 +278,78 @@ function ManageExamPage({ current_user_role }) {
 
     const handle_form_submit = async (e) => {
         e.preventDefault();
+        set_error_message('');
         
         try {
+            let result;
+            
             if (modal_mode === 'create') {
-                // TODO: Implement create exam API call
                 console.log('Creating exam:', form_data);
-                // const result = await create_exam(form_data);
+                result = await createExam(form_data);
+                
+                if (result.success) {
+                    console.log('✅ Exam created successfully:', result.data);
+                } else {
+                    throw new Error(result.message || 'Failed to create exam');
+                }
             } else if (modal_mode === 'edit') {
-                // TODO: Implement update exam API call
                 console.log('Updating exam:', selected_exam.exam_id, form_data);
-                // const result = await update_exam(selected_exam.exam_id, form_data);
+                result = await updateExam(selected_exam.exam_id, form_data);
+                
+                if (result.success) {
+                    console.log('✅ Exam updated successfully:', result.data);
+                } else {
+                    throw new Error(result.message || 'Failed to update exam');
+                }
             } else if (modal_mode === 'delete') {
-                // TODO: Implement delete exam API call
                 console.log('Deleting exam:', selected_exam.exam_id);
-                // const result = await delete_exam(selected_exam.exam_id);
+                result = await deleteExam(selected_exam.exam_id);
+                
+                if (result.success) {
+                    console.log('✅ Exam deleted successfully');
+                } else {
+                    throw new Error(result.message || 'Failed to delete exam');
+                }
             }
 
             set_show_modal(false);
             handle_api_get_all_exams(); // Refresh the list
         } catch (error) {
-            console.error('Form submission error:', error);
-            set_error_message('Đã xảy ra lỗi khi thực hiện thao tác');
+            console.error('❌ Form submission error:', error);
+            set_error_message(error.message || 'Đã xảy ra lỗi khi thực hiện thao tác');
         }
     };
 
     const handle_input_change = (e) => {
         const { name, value } = e.target;
-        set_form_data(prev => ({
-            ...prev,
-            [name]: value
-        }));
+        set_form_data(prev => {
+            const updated_data = {
+                ...prev,
+                [name]: value
+            };
+            
+            // Auto-calculate end_time when start_time or duration_minutes changes
+            if (name === 'start_time' || name === 'duration_minutes') {
+                const start_time = name === 'start_time' ? value : prev.start_time;
+                const duration = name === 'duration_minutes' ? parseInt(value) || 0 : prev.duration_minutes;
+                
+                if (start_time && duration > 0) {
+                    // Parse start time
+                    const [hours, minutes] = start_time.split(':').map(Number);
+                    const start_date = new Date();
+                    start_date.setHours(hours, minutes, 0, 0);
+                    
+                    // Add duration in minutes
+                    const end_date = new Date(start_date.getTime() + duration * 60000);
+                    
+                    // Format as HH:MM
+                    const end_time = end_date.toTimeString().slice(0, 5);
+                    updated_data.end_time = end_time;
+                }
+            }
+            
+            return updated_data;
+        });
     };
 
     // Filter exams based on search and filter criteria
@@ -294,22 +383,6 @@ function ManageExamPage({ current_user_role }) {
                                     <small className="text-muted">
                                         {connection_status === 'connected' ? 'Realtime' : 'Offline'}
                                     </small>
-                                </div>
-                                
-                                {/* Global Summary Stats */}
-                                <div className="d-flex gap-2">
-                                    <span className="badge bg-warning text-dark">
-                                        <i className="bi bi-exclamation-triangle me-1"></i>
-                                        {Object.values(exam_stats).reduce((total, stats) => 
-                                            total + (stats.unregistered_student_ids?.length || 0), 0
-                                        )} học sinh chưa đăng ký
-                                    </span>
-                                    <span className="badge bg-info text-dark">
-                                        <i className="bi bi-person-check me-1"></i>
-                                        {Object.values(exam_stats).reduce((total, stats) => 
-                                            total + (stats.unassigned_proctor_ids?.length || 0), 0
-                                        )} giám thị thiếu
-                                    </span>
                                 </div>
                                 
                                 <button 
@@ -346,9 +419,11 @@ function ManageExamPage({ current_user_role }) {
                                         onChange={(e) => set_filter_subject(e.target.value)}
                                     >
                                         <option value="all">Tất cả môn học</option>
-                                        {/* TODO: Add subject options */}
-                                        <option value="MATH101">Toán học</option>
-                                        <option value="PHYS101">Vật lý</option>
+                                        {subjects.map(subject => (
+                                            <option key={subject.subject_code} value={subject.subject_code}>
+                                                {subject.subject_name}
+                                            </option>
+                                        ))}
                                     </select>
                                 </div>
                                 <div className="col-md-3">
@@ -391,6 +466,7 @@ function ManageExamPage({ current_user_role }) {
                                                 <th scope="col">Môn học</th>
                                                 <th scope="col">Ngày thi</th>
                                                 <th scope="col">Thời gian</th>
+                                                <th scope="col">Phòng thi</th>
                                                 <th scope="col">Phương thức</th>
                                                 <th scope="col">Trạng thái</th>
                                                 <th scope="col">Thao tác</th>
@@ -399,7 +475,7 @@ function ManageExamPage({ current_user_role }) {
                                         <tbody>
                                             {filtered_exams.length === 0 ? (
                                                 <tr>
-                                                    <td colSpan="8" className="text-center py-4 text-muted">
+                                                    <td colSpan="9" className="text-center py-4 text-muted">
                                                         <i className="bi bi-inbox fs-1 d-block mb-2"></i>
                                                         Không có kỳ thi nào
                                                     </td>
@@ -424,6 +500,9 @@ function ManageExamPage({ current_user_role }) {
                                                             <span className="badge bg-info text-dark">
                                                                 {exam.subject_code}
                                                             </span>
+                                                            <div className="text-muted small">
+                                                                {get_subject_name(exam.subject_code)}
+                                                            </div>
                                                         </td>
                                                         <td>
                                                             {new Date(exam.exam_date).toLocaleDateString('vi-VN')}
@@ -435,6 +514,16 @@ function ManageExamPage({ current_user_role }) {
                                                                     {exam.duration_minutes} phút
                                                                 </div>
                                                             </div>
+                                                        </td>
+                                                        <td>
+                                                            <span className={`badge ${exam.room_id ? 'bg-success' : 'bg-warning text-dark'}`}>
+                                                                {get_room_name(exam.room_id)}
+                                                            </span>
+                                                            {exam.max_students && (
+                                                                <div className="text-muted small">
+                                                                    Tối đa {exam.max_students} người
+                                                                </div>
+                                                            )}
                                                         </td>
                                                         <td>
                                                             <span className="badge bg-secondary">
@@ -543,9 +632,11 @@ function ManageExamPage({ current_user_role }) {
                                                         required
                                                     >
                                                         <option value="">Chọn môn học</option>
-                                                        {/* TODO: Load from subjects API */}
-                                                        <option value="MATH101">MATH101 - Toán học</option>
-                                                        <option value="PHYS101">PHYS101 - Vật lý</option>
+                                                        {subjects.map(subject => (
+                                                            <option key={subject.subject_code} value={subject.subject_code}>
+                                                                {subject.subject_code} - {subject.subject_name}
+                                                            </option>
+                                                        ))}
                                                     </select>
                                                 </div>
                                             </div>
@@ -597,16 +688,19 @@ function ManageExamPage({ current_user_role }) {
                                             <div className="col-md-4">
                                                 <div className="mb-3">
                                                     <label className="form-label">
-                                                        Giờ kết thúc <span className="text-danger">*</span>
+                                                        Giờ kết thúc <span className="text-muted">(Tự động)</span>
                                                     </label>
                                                     <input
                                                         type="time"
-                                                        className="form-control"
+                                                        className="form-control bg-light"
                                                         name="end_time"
                                                         value={form_data.end_time}
-                                                        onChange={handle_input_change}
-                                                        required
+                                                        readOnly
+                                                        placeholder="Sẽ tự động tính"
                                                     />
+                                                    <small className="text-muted">
+                                                        Được tính từ giờ bắt đầu + thời lượng
+                                                    </small>
                                                 </div>
                                             </div>
 
@@ -663,9 +757,11 @@ function ManageExamPage({ current_user_role }) {
                                                         onChange={handle_input_change}
                                                     >
                                                         <option value="">Chưa phân phòng</option>
-                                                        {/* TODO: Load from rooms API */}
-                                                        <option value="1">Phòng A1</option>
-                                                        <option value="2">Phòng A2</option>
+                                                        {rooms.map(room => (
+                                                            <option key={room.room_id} value={room.room_id}>
+                                                                {room.room_name} ({room.capacity} chỗ)
+                                                            </option>
+                                                        ))}
                                                     </select>
                                                 </div>
                                             </div>

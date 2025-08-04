@@ -134,6 +134,21 @@ Exam.hasMany(Registration, {
     onUpdate: "CASCADE"
 });
 
+// ExamProctor associations for direct queries
+ExamProctor.belongsTo(Exam, {
+    foreignKey: 'exam_id',
+    as: 'exam',
+    onDelete: "CASCADE",
+    onUpdate: "CASCADE"
+});
+
+ExamProctor.belongsTo(User, {
+    foreignKey: 'proctor_id',
+    as: 'proctor',
+    onDelete: "CASCADE",
+    onUpdate: "CASCADE"
+});
+
 // Subject associations
 Subject.hasMany(Exam, {
 	foreignKey: "subject_code",

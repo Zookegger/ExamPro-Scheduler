@@ -382,6 +382,100 @@ function AdminDashboardStats() {
 
 // Main Production Page Component
 function MainPage({current_user_role}) {
+    const get_role_dashboard_content = () => {
+        switch(current_user_role) {
+            case 'admin':
+                return (
+                    <div className="row mb-4">
+                        <div className="col-12">
+                            <div className="alert alert-info">
+                                <h5><i className="bi bi-speedometer2 me-2"></i>Trang quản trị</h5>
+                                <p className="mb-2">Chào mừng đến với hệ thống quản lý thi ExamPro!</p>
+                                <div className="d-flex gap-2">
+                                    <a href="/admin/dashboard" className="btn btn-primary btn-sm">
+                                        <i className="bi bi-graph-up me-1"></i>
+                                        Xem thống kê
+                                    </a>
+                                    <a href="/admin/manage-exam" className="btn btn-outline-primary btn-sm">
+                                        <i className="bi bi-calendar-event me-1"></i>
+                                        Quản lý kỳ thi
+                                    </a>
+                                    <a href="/admin/reports" className="btn btn-outline-secondary btn-sm">
+                                        <i className="bi bi-file-earmark-text me-1"></i>
+                                        Báo cáo
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            case 'teacher':
+                return (
+                    <div className="row mb-4">
+                        <div className="col-12">
+                            <div className="alert alert-success">
+                                <h5><i className="bi bi-person-badge me-2"></i>Trang giáo viên</h5>
+                                <p className="mb-2">Chào mừng giáo viên đến với ExamPro!</p>
+                                <div className="d-flex gap-2">
+                                    <a href="/teacher/my-subjects" className="btn btn-success btn-sm">
+                                        <i className="bi bi-journal-text me-1"></i>
+                                        Môn học của tôi
+                                    </a>
+                                    <a href="/teacher/schedule" className="btn btn-outline-success btn-sm">
+                                        <i className="bi bi-calendar-week me-1"></i>
+                                        Lịch công tác
+                                    </a>
+                                    <a href="/teacher/exam-proctor" className="btn btn-outline-info btn-sm">
+                                        <i className="bi bi-eye me-1"></i>
+                                        Giám thị thi
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            case 'student':
+                return (
+                    <div className="row mb-4">
+                        <div className="col-12">
+                            <div className="alert alert-info">
+                                <h5><i className="bi bi-mortarboard me-2"></i>Trang học sinh</h5>
+                                <p className="mb-2">Chào mừng học sinh đến với ExamPro!</p>
+                                <div className="d-flex gap-2">
+                                    <a href="/student/subject-enrollment" className="btn btn-primary btn-sm">
+                                        <i className="bi bi-book me-1"></i>
+                                        Đăng ký môn học
+                                    </a>
+                                    <a href="/student/my-exams" className="btn btn-outline-primary btn-sm">
+                                        <i className="bi bi-calendar-check me-1"></i>
+                                        Kỳ thi của tôi
+                                    </a>
+                                    <a href="/student/exam-schedule" className="btn btn-outline-secondary btn-sm">
+                                        <i className="bi bi-calendar-event me-1"></i>
+                                        Lịch thi chung
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            default:
+                return (
+                    <div className="row mb-4">
+                        <div className="col-12">
+                            <div className="alert alert-warning">
+                                <h5><i className="bi bi-person me-2"></i>Chào mừng đến ExamPro</h5>
+                                <p className="mb-2">Vui lòng đăng nhập để sử dụng hệ thống.</p>
+                                <a href="/login" className="btn btn-warning">
+                                    <i className="bi bi-box-arrow-in-right me-1"></i>
+                                    Đăng nhập
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                );
+        }
+    };
 
     return (
         <div className="container-fluid mt-4">
@@ -392,6 +486,9 @@ function MainPage({current_user_role}) {
                     </div>
                 </div>
             </div>
+
+            {/* Role-specific dashboard content */}
+            {get_role_dashboard_content()}
 
             {/* Admin Dashboard Stats */}
             {current_user_role === "admin" && <AdminDashboardStats />}

@@ -39,19 +39,19 @@ const { require_admin_role } = require('../middleware/admin');
 router.get('/', authenticate_jwt, getUserNotifications);
 
 /**
- * @route   PUT /api/notifications/read-all
+ * @route   PUT /api/notifications/mark-read
+ * @desc    Mark specific notifications as read (bulk operation)
+ * @access  Private (requires JWT token)
+ * @body    {number[]} notification_ids - Array of notification IDs to mark as read
+ */
+router.put('/mark-read', authenticate_jwt, markNotificationsAsRead);
+
+/**
+ * @route   PUT /api/notifications/mark-all-read
  * @desc    Mark all notifications as read for the authenticated user
  * @access  Private (requires JWT token)
  */
 router.put('/mark-all-read', authenticate_jwt, markAllNotificationsAsRead);
-
-/**
- * @route   PUT /api/notifications/:notification_id/read
- * @desc    Mark a single notification as read
- * @access  Private (requires JWT token)
- * @param   {number} notification_id - ID of notification to mark as read
- */
-router.put('/:notification_id/read', authenticate_jwt, markNotificationsAsRead);
 
 /**
  * @route   POST /api/notifications

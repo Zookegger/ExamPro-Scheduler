@@ -10,3 +10,5 @@ export { default as ManageUserPage } from './ManageUserPage';
 export { default as ManageRoomPage } from './ManageRoomPage';
 export { default as ManageSubjectPage } from './ManageSubjectPage';
 export { default as ManageSchedulePage } from './ManageSchedulePage';
+export { default as AdminStatsDashboardPage } from './AdminStatsDashboardPage';
+export { default as AdminReportPage } from './AdminReportPage';

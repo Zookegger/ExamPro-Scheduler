@@ -114,6 +114,8 @@ function AdminSidebar({
             icon: 'bi-journal-check',
             items: [
                 { path: '/', title: 'Dashboard', icon: 'bi-speedometer2' },
+                { path: '/admin/dashboard', title: 'Thống kê Dashboard', icon: 'bi-graph-up' },
+                { path: '/admin/reports', title: 'Báo cáo', icon: 'bi-file-earmark-text' },
                 { path: '/admin/manage-exam', title: 'Quản lý kỳ thi', icon: 'bi-calendar-event' },
                 { path: '/admin/manage-user', title: 'Quản lý Người dùng', icon: 'bi-people' },
                 { path: '/admin/manage-schedule', title: 'Lịch Thi', icon: 'bi-calendar3' },

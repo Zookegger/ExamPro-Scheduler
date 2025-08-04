@@ -12,7 +12,6 @@
 
 const { models, utility } = require('../models');
 const { Notification, User } = models;
-const db = utility;
 const { Op } = require('sequelize');
 const { notifyUser, createSystemAnnouncement } = require('../services/notificationService');
 
@@ -150,7 +149,7 @@ async function markAllNotificationsAsRead(req, res, next) {
     try {
         const user_id = req.user.user_id;
         
-        await db.models.Notification.update(
+        const [updated_count] = await Notification.update(
             { is_read: true },
             { 
                 where: { 
@@ -162,15 +161,21 @@ async function markAllNotificationsAsRead(req, res, next) {
         );
         
         await transaction.commit();
+        console.log(`✅ Marked ${updated_count} notifications as read for user ${user_id}`);
         
         res.json({
             success: true,
-            message: 'All notifications marked as read'
+            updated_count,
+            message: 'Đã đánh dấu tất cả thông báo là đã đọc'
         });
     } catch (error) {
         await transaction.rollback();
         console.error('❌ Mark all notifications as read failed, transaction rolled back:', error);
-        next(error);
+        res.status(500).json({
+            success: false,
+            message: 'Lỗi cập nhật thông báo',
+            error: error.message
+        });
     }
 }
 
@@ -186,7 +191,7 @@ async function createNotification(req, res, next) {
     
     try {
         const notification_data = req.body;
-        const new_notification = await db.models.Notification.create(notification_data, { transaction });
+        const new_notification = await Notification.create(notification_data, { transaction });
         
         await transaction.commit();
         
@@ -198,7 +203,11 @@ async function createNotification(req, res, next) {
     } catch (error) {
         await transaction.rollback();
         console.error('❌ Create notification failed, transaction rolled back:', error);
-        next(error);
+        res.status(500).json({
+            success: false,
+            message: 'Lỗi tạo thông báo',
+            error: error.message
+        });
     }
 }
 
@@ -215,7 +224,7 @@ async function deleteNotification(req, res, next) {
         const notification_id = req.params.notification_id;
         const user_id = req.user.user_id;
         
-        const notification = await db.models.Notification.findOne({
+        const notification = await Notification.findOne({
             where: {
                 notification_id,
                 user_id
@@ -242,7 +251,11 @@ async function deleteNotification(req, res, next) {
     } catch (error) {
         await transaction.rollback();
         console.error('❌ Delete notification failed, transaction rolled back:', error);
-        next(error);
+        res.status(500).json({
+            success: false,
+            message: 'Lỗi xóa thông báo',
+            error: error.message
+        });
     }
 }
 

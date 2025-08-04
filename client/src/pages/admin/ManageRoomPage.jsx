@@ -360,13 +360,6 @@ function ManageRoomPage({ current_user, current_user_role }) {
                 <div className="col-12">
                     <div className="card">
                         <div className="card-header d-flex justify-content-between align-items-center">
-                            <div className="d-flex align-items-center">
-                                <h5 className="mb-0 me-3">🏢 Quản lý Phòng thi</h5>
-                                <span className={`badge ${is_connected ? 'bg-success' : 'bg-danger'}`}>
-                                    <i className={`bi ${is_connected ? 'bi-wifi' : 'bi-wifi-off'} me-1`}></i>
-                                    {is_connected ? 'Kết nối thời gian thực' : 'Mất kết nối'}
-                                </span>
-                            </div>
                             <button 
                                 className="btn btn-success"
                                 onClick={() => handle_modal_open('create')}

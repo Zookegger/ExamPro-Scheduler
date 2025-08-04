@@ -17,6 +17,17 @@ import {
   ManageRoomPage,
   ManageSchedulePage,
   ManageSubjectPage,
+  AdminStatsDashboardPage,
+  AdminReportPage,
+  StudentDashboardPage,
+  SubjectEnrollmentPage,
+  StudentSchedulePage,
+  MyExamsPage,
+  TeacherDashboardPage,
+  ManageClassPage,
+  TeacherSchedulePage,
+  TeacherSubjectsPage,
+  ExamProctorPage,
 } from "./pages";
 import {
   checkAuth,
@@ -320,6 +331,24 @@ function AppContent({
 
             {/* Admin Routes */}
             <Route
+              path="/admin/dashboard"
+              element={
+                <AdminStatsDashboardPage
+                  current_user={current_user_id}
+                  current_user_role={current_user_role}
+                />
+              }
+            />
+            <Route
+              path="/admin/reports"
+              element={
+                <AdminReportPage
+                  current_user={current_user_id}
+                  current_user_role={current_user_role}
+                />
+              }
+            />
+            <Route
               path="/admin/manage-user"
               element={
                 <ManageUserPage
@@ -367,65 +396,86 @@ function AppContent({
 
             {/* Student Routes */}
             <Route
+              path="/student/dashboard"
+              element={
+                <StudentDashboardPage
+                  current_user_role={current_user_role}
+                  current_user_id={current_user_id}
+                />
+              }
+            />
+            <Route
               path="/student/subject-enrollment"
               element={
-                <div className="container mt-4">
-                  <h3>🎓 Subject Enrollment</h3>
-                  <p>
-                    Student subject enrollment page - TODO: Implement
-                    SubjectEnrollmentPage component
-                  </p>
-                </div>
+                <SubjectEnrollmentPage
+                  current_user_role={current_user_role}
+                  current_user_id={current_user_id}
+                />
               }
             />
             <Route
               path="/student/my-exams"
               element={
-                <div className="container mt-4">
-                  <h3>📋 My Exams</h3>
-                  <p>
-                    Student personal exams page - TODO: Implement MyExamsPage
-                    component
-                  </p>
-                </div>
+                <MyExamsPage
+                  current_user_role={current_user_role}
+                  current_user_id={current_user_id}
+                />
               }
             />
             <Route
               path="/student/exam-schedule"
               element={
-                <div className="container mt-4">
-                  <h3>📅 Exam Schedule</h3>
-                  <p>
-                    Public exam schedule page - TODO: Implement ExamSchedulePage
-                    component
-                  </p>
-                </div>
+                <StudentSchedulePage
+                  current_user_role={current_user_role}
+                  current_user_id={current_user_id}
+                />
               }
             />
 
             {/* Teacher Routes */}
             <Route
+              path="/teacher/dashboard"
+              element={
+                <TeacherDashboardPage
+                  current_user_role={current_user_role}
+                  current_user_id={current_user_id}
+                />
+              }
+            />
+            <Route
               path="/teacher/my-subjects"
               element={
-                <div className="container mt-4">
-                  <h3>📚 My Subjects</h3>
-                  <p>
-                    Teacher subjects management page - TODO: Implement
-                    MySubjectsPage component
-                  </p>
-                </div>
+                <TeacherSubjectsPage
+                  current_user_role={current_user_role}
+                  current_user_id={current_user_id}
+                />
+              }
+            />
+            <Route
+              path="/teacher/manage-class"
+              element={
+                <ManageClassPage
+                  current_user_role={current_user_role}
+                  current_user_id={current_user_id}
+                />
+              }
+            />
+            <Route
+              path="/teacher/schedule"
+              element={
+                <TeacherSchedulePage
+                  current_user_role={current_user_role}
+                  current_user_id={current_user_id}
+                />
               }
             />
             <Route
               path="/teacher/exam-proctor"
               element={
-                <div className="container mt-4">
-                  <h3>👁️ Exam Proctoring</h3>
-                  <p>
-                    Teacher exam proctoring page - TODO: Implement
-                    ExamProctorPage component
-                  </p>
-                </div>
+                <ExamProctorPage
+                  current_user_role={current_user_role}
+                  current_user_id={current_user_id}
+                />
               }
             />
 
