@@ -13,8 +13,7 @@
  * - Socket.io rooms enable efficient targeted messaging
  * - Automatic cleanup on disconnect
  */
-const { models, utility } = require("../models");
-const { sequelize } = utility;
+const { models } = require("../models");
 const { Notification } = models;
 
 // Constants for error messages and events
@@ -72,7 +71,7 @@ class NotificationHandler {
 
 	setupAckHandler(socket) {
 		socket.on("acknowledge_notification", async (notification_id) => {
-			const transaction = await sequelize.transaction();
+			const transaction = await models.sequelize.transaction();
 			
 			try {
 				if (!this.validateUser(socket)) {

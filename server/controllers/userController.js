@@ -110,7 +110,7 @@ async function login(user_name, password, res) {
 				user_name: user.user_name,
 				role: user.user_role,
                 email: user.email
-			},
+			}
 		});
 	} catch (error) {
 		throw error;
@@ -152,10 +152,141 @@ async function authorize(user_id, res) {
     }
 }
 
+/**
+ * Generates a temporary WebSocket authentication token
+ * 
+ * Creates a short-lived JWT token specifically for WebSocket authentication.
+ * This maintains security by validating the HTTP-only cookie session and 
+ * providing a temporary token without storing it client-side.
+ * 
+ * @async
+ * @function get_websocket_token
+ * @param {number} user_id - Authenticated user ID from middleware
+ * @param {Object} res - Express response object
+ * @returns {Promise<Object>} Response with temporary WebSocket token
+ * 
+ * @example
+ * // Successful response
+ * {
+ *   success: true,
+ *   websocket_token: "eyJhbGciOiJIUzI1NiIs...",
+ *   expires_in: 3600
+ * }
+ */
+async function get_websocket_token(user_id, res) {
+    try {
+        const user = await db.models.User.findByPk(user_id);
+
+        if (!user) {
+            return res.status(404).json({ 
+                success: false, 
+                message: 'Không tìm thấy người dùng' 
+            });
+        }
+
+        // Create temporary token for WebSocket authentication (1 hour expiry)
+        const websocket_payload = {
+            user_id: user.user_id,
+            user_name: user.user_name,
+            user_role: user.user_role,
+            token_type: 'websocket'
+        };
+
+        const websocket_token = generate_jwt(websocket_payload, {
+            expiresIn: '1h', // Short-lived for security
+            issuer: 'exampro-scheduler-ws',
+            audience: 'websocket-clients'
+        });
+
+        return res.json({
+            success: true,
+            websocket_token,
+            expires_in: 3600 // 1 hour in seconds
+        });
+    } catch (error) {
+        console.error('WebSocket token generation failed:', error);
+        return res.status(500).json({ 
+            success: false, 
+            message: 'Không thể tạo token WebSocket' 
+        });
+    }
+}
+
+/**
+ * Renews an expired WebSocket token
+ * 
+ * Validates the HTTP session and issues a new WebSocket token for 
+ * continued real-time functionality without requiring full re-authentication.
+ * 
+ * @async
+ * @function renew_websocket_token
+ * @param {number} user_id - Authenticated user ID from middleware
+ * @param {Object} res - Express response object
+ * @returns {Promise<Object>} Response with new WebSocket token
+ * 
+ * @example
+ * // Successful renewal response
+ * {
+ *   success: true,
+ *   websocket_token: "eyJhbGciOiJIUzI1NiIs...",
+ *   expires_in: 3600,
+ *   renewed_at: "2025-08-04T10:30:00.000Z"
+ * }
+ */
+async function renew_websocket_token(user_id, res) {
+    try {
+        const user = await db.models.User.findByPk(user_id);
+
+        if (!user || !user.is_active) {
+            return res.status(404).json({ 
+                success: false, 
+                message: 'Tài khoản không hợp lệ hoặc đã bị vô hiệu hóa' 
+            });
+        }
+
+        // Generate fresh WebSocket token
+        const websocket_payload = {
+            user_id: user.user_id,
+            user_name: user.user_name,
+            user_role: user.user_role,
+            token_type: 'websocket',
+            renewed: true // Flag to indicate this is a renewed token
+        };
+
+        const new_websocket_token = generate_jwt(websocket_payload, {
+            expiresIn: '1h',
+            issuer: 'exampro-scheduler-ws',
+            audience: 'websocket-clients'
+        });
+
+        console.log(`🔄 WebSocket token renewed for user: ${user.user_name} (${user.user_role})`);
+
+        return res.json({
+            success: true,
+            websocket_token: new_websocket_token,
+            expires_in: 3600, // 1 hour in seconds
+            renewed_at: new Date().toISOString(),
+            user: {
+                id: user.user_id,
+                user_name: user.user_name,
+                role: user.user_role
+            }
+        });
+    } catch (error) {
+        console.error('WebSocket token renewal failed:', error);
+        return res.status(500).json({ 
+            success: false, 
+            message: 'Không thể gia hạn token WebSocket' 
+        });
+    }
+}
+
 module.exports = {
     userController: {
         login,
         logout,
-        authorize
+        authorize,
+        get_websocket_token,
+        renew_websocket_token
     },
 }

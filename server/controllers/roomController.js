@@ -1,6 +1,53 @@
 const db = require('../models');
 const { Op } = require('sequelize');
 
+// WebSocket instance for real-time updates
+let websocket_io = null;
+
+/**
+ * Set WebSocket instance for real-time room updates
+ * @param {Object} io - Socket.io instance
+ */
+function set_websocket_io(io) {
+    websocket_io = io;
+    console.log('🔌 WebSocket connected to room controller');
+}
+
+/**
+ * Emit room table update to connected clients
+ * @param {string} action - Action performed (create, update, delete)
+ * @param {Object} room - Room data
+ * @param {Object} admin_info - Admin who performed the action
+ */
+function emit_room_table_update(action, room, admin_info = null) {
+    if (websocket_io) {
+        console.log(`📡 Emitting room_table_update - action: ${action}, room: ${room.room_name}`);
+        websocket_io.to('room_management').emit('room_table_update', {
+            action: action,
+            room: room,
+            admin_info: admin_info,
+            timestamp: new Date().toISOString()
+        });
+    }
+}
+
+/**
+ * Emit room exam status change to connected clients
+ * @param {number} room_id - Room ID
+ * @param {Object} status_info - Status information
+ */
+function emit_room_exam_status_change(room_id, status_info) {
+    if (websocket_io) {
+        console.log(`📊 Emitting room exam status change for room ${room_id}: ${status_info.status}`);
+        websocket_io.to('room_management').emit('room_exam_status_change', {
+            room_id: room_id,
+            status: status_info.status,
+            exam_info: status_info.current_exam || status_info.upcoming_exam,
+            timestamp: new Date().toISOString()
+        });
+    }
+}
+
 /**
  * Room Controller
  * 
@@ -334,6 +381,9 @@ async function create_room(req, res) {
         
         console.log('✅ Room created successfully:', new_room.room_id);
         
+        // Emit real-time update to connected clients
+        emit_room_table_update('create', new_room, req.user);
+        
         res.status(201).json({
             success: true,
             room: new_room,
@@ -461,6 +511,13 @@ async function update_room(req, res) {
         
         console.log('✅ Room updated successfully:', room_id);
         
+        // Emit real-time update to connected clients
+        emit_room_table_update('update', updated_room, req.user);
+        
+        // Check and emit exam status change if needed
+        const exam_status = await get_room_exam_status(room_id);
+        emit_room_exam_status_change(room_id, exam_status);
+        
         res.json({
             success: true,
             room: updated_room,
@@ -555,10 +612,16 @@ async function delete_room(req, res) {
             });
         }
         
+        // Store room data before deletion for WebSocket emission
+        const deleted_room_data = { ...room.dataValues };
+        
         // Delete the room
         await room.destroy();
         
         console.log('✅ Room deleted successfully:', room_id);
+        
+        // Emit real-time update to connected clients
+        emit_room_table_update('delete', deleted_room_data, req.user);
         
         res.json({
             success: true,
@@ -580,5 +643,8 @@ module.exports = {
     get_room_exam_status,
     create_room,
     update_room,
-    delete_room
+    delete_room,
+    set_websocket_io,
+    emit_room_table_update,
+    emit_room_exam_status_change
 };

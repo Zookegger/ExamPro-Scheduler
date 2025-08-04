@@ -24,6 +24,132 @@ function ManageRoomPage({ current_user, current_user_role }) {
     const [filter_status, set_filter_status] = useState('all');
     const [error_message, set_error_message] = useState('');
 
+    // WebSocket event handlers for real-time room management
+    const room_websocket_events = {
+        'room_table_update': handle_room_table_update,
+        'room_exam_status_change': handle_room_status_change,
+        'room_status_update': handle_room_status_update,
+        'room_notification': handle_room_notification,
+        'room_error': handle_room_error
+    };
+
+    // Initialize WebSocket connection
+    const { is_connected, emit_event } = useWebsocketConnection({
+        events: room_websocket_events,
+        auto_connect: true
+    });
+
+    // WebSocket event handler functions
+    function handle_room_table_update(data) {
+        console.log('🏢 Room table update received:', data);
+        const { action, room, admin_info } = data;
+
+        switch (action) {
+            case 'create':
+                set_rooms(prev => [...prev, room]);
+                show_success_toast(`Phòng "${room.room_name}" đã được tạo bởi ${admin_info?.full_name || 'Admin'}`);
+                break;
+            case 'update':
+                set_rooms(prev => prev.map(r => r.room_id === room.room_id ? room : r));
+                show_success_toast(`Phòng "${room.room_name}" đã được cập nhật bởi ${admin_info?.full_name || 'Admin'}`);
+                break;
+            case 'delete':
+                set_rooms(prev => prev.filter(r => r.room_id !== room.room_id));
+                show_warning_toast(`Phòng "${room.room_name}" đã được xóa bởi ${admin_info?.full_name || 'Admin'}`);
+                break;
+            default:
+                console.warn('Unknown room table update action:', action);
+        }
+    }
+
+    function handle_room_status_change(data) {
+        console.log('📊 Room status change received:', data);
+        const { room_id, status, exam_info } = data;
+
+        set_rooms(prev => prev.map(room => {
+            if (room.room_id === room_id) {
+                return {
+                    ...room,
+                    exam_status: {
+                        status: status,
+                        status_text: get_exam_status_text(status),
+                        status_class: get_exam_status_class(status),
+                        current_exam: exam_info,
+                        timestamp: data.timestamp
+                    }
+                };
+            }
+            return room;
+        }));
+    }
+
+    function handle_room_status_update(data) {
+        console.log('🔄 Room status update received:', data);
+        if (data.success && data.room_statuses) {
+            // Update multiple room statuses
+            set_rooms(prev => prev.map(room => {
+                const status_info = data.room_statuses.find(s => s.room_id === room.room_id);
+                if (status_info) {
+                    return {
+                        ...room,
+                        exam_status: status_info.exam_status
+                    };
+                }
+                return room;
+            }));
+        }
+    }
+
+    function handle_room_notification(data) {
+        console.log('📢 Room notification received:', data);
+        if (data.success) {
+            show_success_toast(data.message);
+        } else {
+            show_error_toast(data.message);
+        }
+    }
+
+    function handle_room_error(data) {
+        console.error('❌ Room error received:', data);
+        show_error_toast(data.message || 'Lỗi hệ thống');
+    }
+
+    // Helper functions for exam status display
+    function get_exam_status_text(status) {
+        switch (status) {
+            case 'in_exam': return 'Đang thi';
+            case 'scheduled': return 'Có lịch thi';
+            case 'available': return 'Sẵn sàng';
+            default: return 'Không xác định';
+        }
+    }
+
+    function get_exam_status_class(status) {
+        switch (status) {
+            case 'in_exam': return 'bg-warning';
+            case 'scheduled': return 'bg-info';
+            case 'available': return 'bg-success';
+            default: return 'bg-secondary';
+        }
+    }
+
+    // Toast notification functions
+    function show_success_toast(message) {
+        // You can integrate with react-toastify or similar library
+        console.log('✅ Success:', message);
+        // For now, just update error message with success styling
+        set_error_message('');
+    }
+
+    function show_warning_toast(message) {
+        console.log('⚠️ Warning:', message);
+    }
+
+    function show_error_toast(message) {
+        console.log('❌ Error:', message);
+        set_error_message(message);
+    }
+
     const handle_api_get_all_rooms = async () => {
         try {
             set_loading(true);
@@ -48,32 +174,7 @@ function ManageRoomPage({ current_user, current_user_role }) {
         }
     };
 
-    const handle_room_table_update = (data) => {
-        const { action, room } = data;
-
-        switch (action){            case 'create':
-                set_rooms(prev => [...prev, room]);
-                break;
-            case 'update':
-                    set_rooms(prev => prev.map(s => 
-                    s.room_id === room.room_id ? room : s
-                ));
-                break;
-            case 'delete':
-                set_rooms(prev => prev.filter(s => 
-                s.room_id !== room.room_id
-            ));
-               break;
-            default:
-                break;
-        }
-    }
-
-    const { emit_event } = useWebsocketConnection({
-        events: {
-            'room_table_update': handle_room_table_update
-        }
-    })
+    // WebSocket connection setup (already defined above with event handlers)
 
     useEffect(() => {
         handle_api_get_all_rooms();
@@ -257,7 +358,13 @@ function ManageRoomPage({ current_user, current_user_role }) {
                 <div className="col-12">
                     <div className="card">
                         <div className="card-header d-flex justify-content-between align-items-center">
-                            <h5 className="mb-0">🏢 Quản lý Phòng thi</h5>
+                            <div className="d-flex align-items-center">
+                                <h5 className="mb-0 me-3">🏢 Quản lý Phòng thi</h5>
+                                <span className={`badge ${is_connected ? 'bg-success' : 'bg-danger'}`}>
+                                    <i className={`bi ${is_connected ? 'bi-wifi' : 'bi-wifi-off'} me-1`}></i>
+                                    {is_connected ? 'Kết nối thời gian thực' : 'Mất kết nối'}
+                                </span>
+                            </div>
                             <button 
                                 className="btn btn-success"
                                 onClick={() => handle_modal_open('create')}

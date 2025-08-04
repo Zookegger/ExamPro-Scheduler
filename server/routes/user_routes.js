@@ -145,6 +145,87 @@ router.post('/me', authenticate_jwt, async(req, res, next) => {
 });
 
 /**
+ * @route POST /api/users/websocket-token
+ * @description Generates a temporary JWT token for WebSocket authentication.
+ * Validates the HTTP-only cookie session and returns a short-lived token
+ * specifically for WebSocket connections. This maintains security by not
+ * storing tokens in browser storage while enabling WebSocket authentication.
+ *
+ * @param {Object} req - Express request object
+ * @param {Object} req.user - Populated by authenticate_jwt middleware
+ * @param {number} req.user.user_id - Authenticated user's ID
+ * @param {Object} res - Express response object
+ *
+ * @returns {Object} JSON response with temporary WebSocket token
+ * @returns {boolean} response.success - Indicates if request was successful
+ * @returns {string} response.websocket_token - Temporary JWT token for WebSocket auth
+ * @returns {number} response.expires_in - Token expiration time in seconds
+ *
+ * @example
+ * // Request (with valid HTTP-only cookie)
+ * POST /api/users/websocket-token
+ * Cookie: jwt_token=<httponly_token>
+ *
+ * // Success Response
+ * {
+ *   "success": true,
+ *   "websocket_token": "eyJhbGciOiJIUzI1NiIs...",
+ *   "expires_in": 3600
+ * }
+ */
+router.post('/websocket-token', authenticate_jwt, async(req, res, next) => {
+    try {
+        const user_id = req.user.user_id;
+
+        await userController.get_websocket_token(user_id, res);
+    } catch (error) {
+        console.error('❌ Route-level websocket-token error:', error);
+        next(error);
+    }
+});
+
+/**
+ * @route POST /api/users/renew-websocket-token
+ * @description Renews an expired WebSocket token for continued real-time functionality.
+ * Validates the HTTP session and issues a fresh WebSocket token without requiring
+ * full re-authentication. Prevents constant reconnection loops when tokens expire.
+ *
+ * @param {Object} req - Express request object
+ * @param {Object} req.user - Populated by authenticate_jwt middleware
+ * @param {number} req.user.user_id - Authenticated user's ID
+ * @param {Object} res - Express response object
+ *
+ * @returns {Object} JSON response with renewed WebSocket token
+ * @returns {boolean} response.success - Indicates if renewal was successful
+ * @returns {string} response.websocket_token - New JWT token for WebSocket auth
+ * @returns {number} response.expires_in - Token expiration time in seconds
+ * @returns {string} response.renewed_at - ISO timestamp of renewal
+ *
+ * @example
+ * // Request (with valid HTTP-only cookie)
+ * POST /api/users/renew-websocket-token
+ * Cookie: jwt_token=<httponly_token>
+ *
+ * // Success Response
+ * {
+ *   "success": true,
+ *   "websocket_token": "eyJhbGciOiJIUzI1NiIs...",
+ *   "expires_in": 3600,
+ *   "renewed_at": "2025-08-04T10:30:00.000Z"
+ * }
+ */
+router.post('/renew-websocket-token', authenticate_jwt, async(req, res, next) => {
+    try {
+        const user_id = req.user.user_id;
+
+        await userController.renew_websocket_token(user_id, res);
+    } catch (error) {
+        console.error('❌ Route-level renew-websocket-token error:', error);
+        next(error);
+    }
+});
+
+/**
  * Error Handler Middleware for User Routes
  * 
  * Catches any errors passed via next(error) from route handlers

@@ -56,7 +56,7 @@ router.get('/student/:student_id', authenticate_jwt, async (req, res, next) => {
  * @access Admin only
  */
 router.post('/enroll', authenticate_jwt, async (req, res, next) => {
-    const transaction = await db.sequelize.transaction();
+    const transaction = await utility.sequelize.transaction();
     
     try {
         if (req.user.user_role !== 'admin') {

@@ -8,6 +8,11 @@ const morgan = require('morgan');
 const cookie_parser = require('cookie-parser');
 const { methods } = require('./models');
 
+// Import WebSocket handlers
+const { setup_websocket_handlers } = require('./websocket');
+const { set_websocket_io } = require('./controllers/roomController');
+const { setupAuthHandlers } = require('./websocket/authorizationHandlers');
+
 require('dotenv').config();
 
 const app = express();
@@ -48,6 +53,44 @@ const io_stream = new Server(server, {
     }
 });
 
+// Import authentication functions
+const { authenticateWebsocketUser } = require('./websocket/authorizationHandlers');
+
+/**
+ * WebSocket Authentication Middleware
+ * 
+ * Authenticates WebSocket connections using tokens passed via Socket.io auth option.
+ * This middleware runs before the connection is established, providing secure
+ * token-based authentication without exposing tokens to client-side storage.
+ */
+io_stream.use(async (socket, next) => {
+    try {
+        // Get token from auth option (passed via client socket.io config)
+        const token = socket.handshake.auth?.token;
+        
+        if (token) {
+            console.log('🔐 WebSocket authentication token received');
+            
+            // Authenticate the user and attach to socket
+            const is_authenticated = await authenticateWebsocketUser(socket, token);
+            
+            if (is_authenticated) {
+                console.log(`✅ WebSocket pre-authenticated: ${socket.user.user_name} (${socket.user.user_role})`);
+                next(); // Allow connection
+            } else {
+                console.log('❌ WebSocket authentication failed during handshake');
+                next(new Error('Authentication failed'));
+            }
+        } else {
+            console.log('🔓 WebSocket connection without token - authentication required later');
+            next(); // Allow connection but require auth later
+        }
+    } catch (error) {
+        console.error('❌ WebSocket authentication middleware error:', error);
+        next(new Error('Authentication error'));
+    }
+});
+
 /**
  * Active Connection Tracking
  * 
@@ -78,14 +121,20 @@ io_stream.on('connection', (socket) => {
         connected_at: new Date(),
         client_ip: client_ip,
         ping_count: 0,
-        user_agent: socket.handshake.headers['user-agent']
+        user_agent: socket.handshake.headers['user-agent'],
+        authenticated: !!socket.user // Track if pre-authenticated
     };
     
     // Store connection for tracking
     active_connections.set(socket.id, connection_info);
 
-    console.log(`🔌 NEW CONNECTION: ${socket.id} from ${client_ip}`);
+    const auth_status = socket.user ? `✅ Pre-authenticated: ${socket.user.user_name} (${socket.user.user_role})` : '🔓 Awaiting authentication';
+    console.log(`🔌 NEW CONNECTION: ${socket.id} from ${client_ip} - ${auth_status}`);
     console.log(`📊 Total connections: ${active_connections.size}`);
+
+    // Set up WebSocket handlers for this connection
+    setup_websocket_handlers(socket, io_stream);
+    setupAuthHandlers(socket);
 
     /**
      * Health Ping Handler
@@ -369,4 +418,7 @@ server.listen(PORT, () => {
     console.log('[SERVER MESSAGE] 🔌 WebSocket server ready for connections');
     console.log('[SERVER MESSAGE] 📊 Health check available at /api/health');
     console.log('[SERVER MESSAGE] 🐛 Debug endpoint available at /api/debug/connections');
+    
+    // Initialize WebSocket in room controller
+    set_websocket_io(io_stream);
 });

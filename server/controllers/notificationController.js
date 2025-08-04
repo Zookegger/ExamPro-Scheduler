@@ -145,7 +145,7 @@ const markNotificationsAsRead = async (req, res) => {
  * @param {object} res - Express response object
  */
 async function markAllNotificationsAsRead(req, res, next) {
-    const transaction = await db.sequelize.transaction();
+    const transaction = await utility.sequelize.transaction();
     
     try {
         const user_id = req.user.user_id;
@@ -182,7 +182,7 @@ async function markAllNotificationsAsRead(req, res, next) {
  * @param {object} notification_data_or_res - Notification data (for system calls) or res object (for API calls)
  */
 async function createNotification(req, res, next) {
-    const transaction = await db.sequelize.transaction();
+    const transaction = await utility.sequelize.transaction();
     
     try {
         const notification_data = req.body;
@@ -209,7 +209,7 @@ async function createNotification(req, res, next) {
  * @param {object} res - Express response object
  */
 async function deleteNotification(req, res, next) {
-    const transaction = await db.sequelize.transaction();
+    const transaction = await utility.sequelize.transaction();
     
     try {
         const notification_id = req.params.notification_id;

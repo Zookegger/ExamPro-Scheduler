@@ -10,6 +10,7 @@ import "./App.css";
 import { LoginPage, DevelopmentPage, MainPage, ForgotPasswordPage, ManageUserPage, ManageExamPage, ManageRoomPage, ManageSchedulePage, ManageSubjectPage } from "./pages";
 import { checkAuth, logout, getUserNotifications, markNotificationsAsRead, markAllNotificationsAsRead } from "./services/apiService";
 import useWebsocketConnection from './hooks/use_websocket_connection';
+import WebSocketTokenTest from './components/WebSocketTokenTest';
 import { 
 	NetworkStatusIndicator, 
 	RoleBasedNavigation, 
@@ -379,6 +380,14 @@ function AppContent({
 							<Route
 								path="/development"
 								element={<DevelopmentPage current_user_role={current_user_role}/>}
+							/>
+						)}
+
+						{/* WebSocket Token Test Route */}
+						{is_development && (
+							<Route
+								path="/websocket-test"
+								element={<WebSocketTokenTest />}
 							/>
 						)}
 

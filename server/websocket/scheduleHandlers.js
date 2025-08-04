@@ -1,5 +1,5 @@
-const { ENUM } = require("sequelize");
-const db = require("../models");
+const { models } = require("../models");
+const { Op } = require('sequelize');
 const { requireAdminPermission } = require('./authorizationHandlers');
 
 const SCHEDULE_EVENTS = {
@@ -49,18 +49,36 @@ class ScheduleHandler {
     }
 
     /**
+     * Validate proctor assignment data from client
+     * @param {Object} data - Proctor assignment data to validate
+     * @returns {Object} Validation result with valid flag and errors
+     */
+    validateProctorAssignmentData(data) {
+        const errors = [];
+        if (!data.proctor_id) errors.push("Missing proctor_id");
+        if (!data.exam_id) errors.push("Missing exam_id");
+        if (data.proctor_id && !Number.isInteger(Number(data.proctor_id))) {
+            errors.push("Invalid proctor_id format");
+        }
+        if (data.exam_id && !Number.isInteger(Number(data.exam_id))) {
+            errors.push("Invalid exam_id format");
+        }
+        return errors.length ? { valid: false, errors } : { valid: true };
+    }
+
+    /**
      * Get unregistered students for a specific exam
      * @param {number} exam_id - Exam ID to check registrations for
      * @returns {Promise<Array>} Array of unregistered students
      */
     async getUnregisteredStudents(exam_id) {
         try {
-            const unregistered_students = await db.models.User.findAll({
+            const unregistered_students = await models.User.findAll({
                 where: {
                     user_role: 'student',
                     is_active: true,
                     user_id: {
-                        [db.Sequelize.Op.notIn]: db.Sequelize.literal(
+                        [Op.notIn]: models.sequelize.literal(
                             `(SELECT student_id FROM registrations WHERE exam_id = ${parseInt(exam_id)})`
                         )
                     }
@@ -82,7 +100,7 @@ class ScheduleHandler {
      */
     async getUnassignedProctors() {
         try {
-            const available_proctors = await db.models.User.findAll({
+            const available_proctors = await models.User.findAll({
                 where: {
                     user_role: 'teacher',
                     is_active: true
@@ -148,7 +166,7 @@ class ScheduleHandler {
 		console.log(`👨‍🎓 Processing student assignment:`, data);
 
 		// Start database transaction for data integrity
-		const transaction = await db.sequelize.transaction();
+		const transaction = await models.sequelize.transaction();
 
 		try {
 			// 🔐 Authorization check - only admins can assign students
@@ -172,7 +190,7 @@ class ScheduleHandler {
 			const { student_id, exam_id } = data;
 
 			// Step 1: Get exam details within transaction
-			const exam = await db.models.Exam.findByPk(exam_id, { transaction });
+			const exam = await models.Exam.findByPk(exam_id, { transaction });
 			if (!exam) {
 				await transaction.rollback();
 				socket.emit(SCHEDULE_EVENTS.ERROR, {
@@ -184,7 +202,7 @@ class ScheduleHandler {
 			}
 
 			// Step 2: Verify student exists and is active
-			const student = await db.models.User.findOne({
+			const student = await models.User.findOne({
 				where: {
 					user_id: student_id,
 					user_role: 'student',
@@ -204,7 +222,7 @@ class ScheduleHandler {
 			}
 
 			// Step 3: Check if student is enrolled in the subject
-			const enrollment = await db.models.Enrollment.findOne({
+			const enrollment = await models.Enrollment.findOne({
 				where: {
 					student_id: student_id,
 					subject_code: exam.subject_code,
@@ -226,7 +244,7 @@ class ScheduleHandler {
 			}
 
 			// Step 4: Check for existing registration
-			const existing_registration = await db.models.Registration.findOne({
+			const existing_registration = await models.Registration.findOne({
 				where: {
 					student_id: student_id,
 					exam_id: exam_id,
@@ -248,7 +266,7 @@ class ScheduleHandler {
 			}
 
 			// Step 5: Create registration within transaction
-			const new_registration = await db.models.Registration.create({
+			const new_registration = await models.Registration.create({
 				student_id: student_id,
 				exam_id: exam_id,
 				registration_status: "approved",
@@ -312,7 +330,7 @@ class ScheduleHandler {
 		console.log(`👨‍🏫 Processing proctor assignment:`, data);
 
 		// Start database transaction for data integrity
-		const transaction = await db.sequelize.transaction();
+		const transaction = await models.sequelize.transaction();
 
 		try {
 			// 🔐 Authorization check - only admins can assign proctors
@@ -336,7 +354,7 @@ class ScheduleHandler {
 			const { proctor_id, exam_id } = data;
 
 			// Step 1: Get exam details within transaction
-			const exam = await db.models.Exam.findByPk(exam_id, { transaction });
+			const exam = await models.Exam.findByPk(exam_id, { transaction });
 			if (!exam) {
 				await transaction.rollback();
 				socket.emit(SCHEDULE_EVENTS.ERROR, {
@@ -348,7 +366,7 @@ class ScheduleHandler {
 			}
 
 			// Step 2: Verify proctor exists and is a teacher
-			const proctor = await db.models.User.findOne({
+			const proctor = await models.User.findOne({
 				where: {
 					user_id: proctor_id,
 					user_role: 'teacher',
@@ -368,7 +386,7 @@ class ScheduleHandler {
 			}
 
 			// Step 3: Check for existing proctor assignment
-			const existing_assignment = await db.models.ExamProctor.findOne({
+			const existing_assignment = await models.ExamProctor.findOne({
 				where: {
 					proctor_id: proctor_id,
 					exam_id: exam_id,
@@ -391,18 +409,18 @@ class ScheduleHandler {
 
 			// Step 4: Check if proctor has conflicting exams at the same time
 			if (exam.exam_date && exam.start_time && exam.end_time) {
-				const conflicting_exams = await db.models.ExamProctor.findAll({
+				const conflicting_exams = await models.ExamProctor.findAll({
 					include: [{
-						model: db.models.Exam,
+						model: models.Exam,
 						where: {
 							exam_date: exam.exam_date,
-							[db.Sequelize.Op.or]: [
+							[utility.sequelize.Op.or]: [
 								{
 									start_time: {
-										[db.Sequelize.Op.lt]: exam.end_time
+										[utility.sequelize.Op.lt]: exam.end_time
 									},
 									end_time: {
-										[db.Sequelize.Op.gt]: exam.start_time
+										[utility.sequelize.Op.gt]: exam.start_time
 									}
 								}
 							]
@@ -426,7 +444,7 @@ class ScheduleHandler {
 			}
 
 			// Step 5: Create proctor assignment within transaction
-			const new_assignment = await db.models.ExamProctor.create({
+			const new_assignment = await models.ExamProctor.create({
 				proctor_id: proctor_id,
 				exam_id: exam_id,
 				assigned_by: socket.user.user_id,
@@ -476,50 +494,6 @@ class ScheduleHandler {
 				details: process.env.NODE_ENV === 'development' ? error.message : undefined
 			});
 		}
-	}
-
-	/**
-	 * Validate registration data for student assignment
-	 * @param {Object} data - Data to validate
-	 * @returns {Object} Validation result with valid flag and errors array
-	 */
-	validateRegistrationData(data) {
-		const errors = [];
-
-		if (!data.student_id || typeof data.student_id !== 'number') {
-			errors.push("Student ID phải là số nguyên");
-		}
-
-		if (!data.exam_id || typeof data.exam_id !== 'number') {
-			errors.push("Exam ID phải là số nguyên");
-		}
-
-		return {
-			valid: errors.length === 0,
-			errors
-		};
-	}
-
-	/**
-	 * Validate proctor assignment data
-	 * @param {Object} data - Data to validate
-	 * @returns {Object} Validation result with valid flag and errors array
-	 */
-	validateProctorAssignmentData(data) {
-		const errors = [];
-
-		if (!data.proctor_id || typeof data.proctor_id !== 'number') {
-			errors.push("Proctor ID phải là số nguyên");
-		}
-
-		if (!data.exam_id || typeof data.exam_id !== 'number') {
-			errors.push("Exam ID phải là số nguyên");
-		}
-
-		return {
-			valid: errors.length === 0,
-			errors
-		};
 	}
 }
 

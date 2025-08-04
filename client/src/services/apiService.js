@@ -129,6 +129,77 @@ export const get_socket_url = () => {
 	return process.env.REACT_APP_WS_URL || "http://localhost:5000";
 };
 
+/**
+ * Gets a temporary WebSocket authentication token
+ *
+ * Securely retrieves a temporary token for WebSocket authentication by validating
+ * the HTTP-only cookie session. This approach maintains security by not storing
+ * JWT tokens in browser storage while enabling WebSocket authentication.
+ *
+ * @returns {Promise<string|null>} Temporary WebSocket token if authenticated, null otherwise
+ *
+ * @example
+ * // Get secure token for WebSocket authentication
+ * const token = await get_auth_token();
+ * if (token) {
+ *     socket.emit('authenticate', { token });
+ * }
+ */
+export const get_auth_token = async () => {
+	try {
+		const response = await api_call("/api/users/websocket-token", {
+			method: "POST",
+			credentials: "include",
+		});
+		
+		if (response.success && response.websocket_token) {
+			return response.websocket_token;
+		}
+		
+		return null;
+	} catch (error) {
+		console.error('Failed to get WebSocket token:', error);
+		return null;
+	}
+};
+
+/**
+ * Renews an expired WebSocket token
+ *
+ * Requests a fresh WebSocket token when the current one has expired or is about
+ * to expire. This prevents WebSocket disconnections due to token expiration.
+ *
+ * @returns {Promise<Object|null>} Token renewal response or null if failed
+ * @returns {string} returns.websocket_token - New WebSocket token
+ * @returns {number} returns.expires_in - Token lifetime in seconds
+ * @returns {string} returns.renewed_at - Renewal timestamp
+ *
+ * @example
+ * // Renew WebSocket token
+ * const renewal = await renew_auth_token();
+ * if (renewal && renewal.websocket_token) {
+ *     // Update WebSocket connection with new token
+ *     socket.emit('renew_token', { new_token: renewal.websocket_token });
+ * }
+ */
+export const renew_auth_token = async () => {
+	try {
+		const response = await api_call("/api/users/renew-websocket-token", {
+			method: "POST",
+			credentials: "include",
+		});
+		
+		if (response.success && response.websocket_token) {
+			return response;
+		}
+		
+		return null;
+	} catch (error) {
+		console.error('Failed to renew WebSocket token:', error);
+		return null;
+	}
+};
+
 // ============================================================================
 // USER AUTHENTICATION & SESSION MANAGEMENT
 // ============================================================================
@@ -138,6 +209,7 @@ export const get_socket_url = () => {
  *
  * Performs user login with automatic JWT token handling via HTTP-only cookies.
  * Supports both username and email-based authentication.
+ * Also stores token locally for WebSocket authentication needs.
  *
  * @param {Object} user_data - Login credentials
  * @param {string} user_data.user_name - Username or email address
@@ -145,6 +217,7 @@ export const get_socket_url = () => {
  * @returns {Promise<Object>} Authentication response
  * @returns {boolean} returns.success - Whether login was successful
  * @returns {Object} [returns.user] - User data if login successful
+ * @returns {string} [returns.token] - JWT token for WebSocket authentication
  * @returns {string} [returns.message] - Error message if login failed
  *
  * @example
@@ -159,18 +232,26 @@ export const get_socket_url = () => {
  *     console.error('Login failed:', result.message);
  * }
  */
-export const login = (user_data) =>
-	api_call("/api/users/login", {
-		method: "POST",
-		body: JSON.stringify(user_data),
-		credentials: "include",
+export const login = async (user_data) => {
+	try {
+		const response = await api_call("/api/users/login", {
+			method: "POST",
+			body: JSON.stringify(user_data),
+			credentials: "include",
+		});
+
+		return response;
+	} catch (error) {
+		console.error('Login failed:', error);
+		throw error;
 	}
-);
+};
 
 /**
  * Logs out the current user
  *
  * Invalidates the current session and clears authentication cookies.
+ * Also removes locally stored JWT token for WebSocket authentication.
  * Should be called when user explicitly logs out or session expires.
  *
  * @returns {Promise<Object>} Logout response
@@ -184,11 +265,18 @@ export const login = (user_data) =>
  *     navigate('/login');
  * }
  */
-export const logout = () =>
-	api_call("/api/users/logout", {
-		method: "POST",
+export const logout = async () => {
+	try {
+		const response = await api_call("/api/users/logout", {
+			method: "POST",
+		});
+
+		return response;
+	} catch (error) {
+		console.error('Logout error:', error);
+		throw error;
 	}
-);
+};
 
 /**
  * Checks current authentication status

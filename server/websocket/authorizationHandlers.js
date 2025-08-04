@@ -78,16 +78,21 @@ async function authenticateWebsocketUser(socket, token) {
             full_name: user.full_name,
             user_role: user.user_role,
             email: user.email,
-            is_active: user.is_active
+            is_active: user.is_active,
+            token_expires_at: decoded.exp * 1000 // Convert to milliseconds
         };
 
         console.log(`🔐 WebSocket user authenticated: ${user.user_name} (${user.user_role})`);
         
-        socket.emit(AUTH_EVENTS.SUCCESS, {
-            success: true,
-            message: 'Xác thực thành công',
-            user_role: user.user_role
-        });
+        // Only emit success if socket is connected (not during handshake)
+        if (socket.connected) {
+            socket.emit(AUTH_EVENTS.SUCCESS, {
+                success: true,
+                message: 'Xác thực thành công',
+                user_role: user.user_role,
+                token_expires_at: socket.user.token_expires_at
+            });
+        }
 
         return true;
 
@@ -95,7 +100,8 @@ async function authenticateWebsocketUser(socket, token) {
         console.error('❌ WebSocket authentication failed:', error);
         
         if (error.name === 'TokenExpiredError') {
-            emitAuthError(socket, AUTH_ERRORS.EXPIRED_TOKEN, 'token_expired');
+            console.log(`⏰ Token expired for socket ${socket.id}, triggering renewal`);
+            emitTokenExpired(socket);
         } else if (error.name === 'JsonWebTokenError') {
             emitAuthError(socket, AUTH_ERRORS.INVALID_TOKEN, 'invalid_token');
         } else {
@@ -104,6 +110,57 @@ async function authenticateWebsocketUser(socket, token) {
 
         return false;
     }
+}
+
+/**
+ * Helper function to emit token expiration event
+ * This triggers the client to renew the token
+ * 
+ * @param {Object} socket - Socket.io socket instance
+ */
+function emitTokenExpired(socket) {
+    socket.emit('token_expired', {
+        success: false,
+        message: 'Token đã hết hạn, đang gia hạn...',
+        error_type: 'token_expired',
+        action_required: 'renew_token',
+        timestamp: new Date().toISOString()
+    });
+}
+
+/**
+ * Check if user token is about to expire (within 5 minutes)
+ * 
+ * @param {Object} socket - Socket.io socket instance with user data
+ * @returns {boolean} Whether token is about to expire
+ */
+function isTokenNearExpiry(socket) {
+    if (!socket.user || !socket.user.token_expires_at) {
+        return false;
+    }
+
+    const current_time = Date.now();
+    const expires_at = socket.user.token_expires_at;
+    const five_minutes = 5 * 60 * 1000; // 5 minutes in milliseconds
+
+    return (expires_at - current_time) <= five_minutes;
+}
+
+/**
+ * Check if user token has expired
+ * 
+ * @param {Object} socket - Socket.io socket instance with user data
+ * @returns {boolean} Whether token has expired
+ */
+function isTokenExpired(socket) {
+    if (!socket.user || !socket.user.token_expires_at) {
+        return true; // Consider invalid tokens as expired
+    }
+
+    const current_time = Date.now();
+    const expires_at = socket.user.token_expires_at;
+
+    return current_time >= expires_at;
 }
 
 /**
@@ -233,10 +290,84 @@ function emitAuthError(socket, message, error_type) {
 function setupAuthHandlers(socket) {
     console.log(`🔐 Setting up auth handlers for socket ${socket.id}`);
 
-    // Handle authentication requests
+    // If user is already pre-authenticated, emit success immediately
+    if (socket.user) {
+        console.log(`🔐 Emitting success for pre-authenticated user: ${socket.user.user_name}`);
+        socket.emit(AUTH_EVENTS.SUCCESS, {
+            success: true,
+            message: 'Xác thực thành công',
+            user_role: socket.user.user_role
+        });
+    }
+
+    // Handle authentication requests (for fallback/re-auth)
     socket.on('authenticate', async (data) => {
         const { token } = data;
         await authenticateWebsocketUser(socket, token);
+    });
+
+    // Handle token renewal requests
+    socket.on('renew_token', async (data) => {
+        const { new_token } = data;
+        
+        if (!new_token) {
+            emitAuthError(socket, 'Token mới không được cung cấp', 'no_new_token');
+            return;
+        }
+
+        console.log(`🔄 Token renewal request for socket ${socket.id}`);
+        
+        const auth_success = await authenticateWebsocketUser(socket, new_token);
+        
+        if (auth_success) {
+            console.log(`✅ Token successfully renewed for user: ${socket.user.user_name}`);
+            socket.emit('token_renewed', {
+                success: true,
+                message: 'Token đã được gia hạn thành công',
+                user_role: socket.user.user_role,
+                token_expires_at: socket.user.token_expires_at,
+                timestamp: new Date().toISOString()
+            });
+        } else {
+            console.log(`❌ Token renewal failed for socket ${socket.id}`);
+            socket.emit('token_renewal_failed', {
+                success: false,
+                message: 'Không thể gia hạn token, vui lòng đăng nhập lại',
+                error_type: 'renewal_failed',
+                timestamp: new Date().toISOString()
+            });
+        }
+    });
+
+    // Handle token expiry check requests
+    socket.on('check_token_expiry', () => {
+        if (!socket.user) {
+            emitAuthError(socket, AUTH_ERRORS.NO_TOKEN, 'not_authenticated');
+            return;
+        }
+
+        const is_expired = isTokenExpired(socket);
+        const is_near_expiry = isTokenNearExpiry(socket);
+
+        socket.emit('token_status', {
+            success: true,
+            is_expired: is_expired,
+            is_near_expiry: is_near_expiry,
+            expires_at: socket.user.token_expires_at,
+            current_time: Date.now(),
+            should_renew: is_near_expiry || is_expired
+        });
+
+        if (is_expired) {
+            emitTokenExpired(socket);
+        } else if (is_near_expiry) {
+            socket.emit('token_near_expiry', {
+                success: true,
+                message: 'Token sắp hết hạn, nên gia hạn sớm',
+                expires_at: socket.user.token_expires_at,
+                minutes_remaining: Math.floor((socket.user.token_expires_at - Date.now()) / (60 * 1000))
+            });
+        }
     });
 
     // Handle permission check requests
@@ -276,6 +407,9 @@ module.exports = {
     requireStudentPermission,
     requireSelfOrAdminPermission,
     setupAuthHandlers,
+    isTokenExpired,
+    isTokenNearExpiry,
+    emitTokenExpired,
     AUTH_EVENTS,
     AUTH_ERRORS
 };
