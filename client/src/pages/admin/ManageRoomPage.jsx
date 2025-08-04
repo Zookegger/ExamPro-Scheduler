@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from "react";
 import AccessDeniedPage from "../common/AccessDeniedPage";
 import Breadcrumb from "../../components/Breadcrumb";
+import { get_all_rooms, create_room, update_room, delete_room } from "../../services/apiService";
+import useWebsocketConnection from "../../hooks/use_websocket_connection";
 
-function ManageRoomPage({ current_user_role }) {
+function ManageRoomPage({ current_user, current_user_role }) {
     const [rooms, set_rooms] = useState([]);
     const [loading, set_loading] = useState(true);
     const [show_modal, set_show_modal] = useState(false);
@@ -24,52 +26,54 @@ function ManageRoomPage({ current_user_role }) {
 
     const handle_api_get_all_rooms = async () => {
         try {
-            // TODO: Implement API call to get all rooms
-            // const result = await get_all_rooms();
-            console.log('Fetching rooms...');
+            set_loading(true);
+            console.log('Fetching rooms from API...');
             
-            // Mock data for now - replace with actual API call
-            const mock_rooms = [
-                {
-                    room_id: 1,
-                    room_name: 'Phòng A1',
-                    building: 'Tòa nhà A',
-                    floor: 1,
-                    capacity: 40,
-                    has_computers: true,
-                    features: 'Máy chiếu, Điều hòa, Wifi',
-                    is_active: true
-                },
-                {
-                    room_id: 2,
-                    room_name: 'Phòng B2',
-                    building: 'Tòa nhà B',
-                    floor: 2,
-                    capacity: 35,
-                    has_computers: false,
-                    features: 'Bảng thông minh, Điều hòa',
-                    is_active: true
-                },
-                {
-                    room_id: 3,
-                    room_name: 'Phòng C1',
-                    building: 'Tòa nhà C',
-                    floor: 1,
-                    capacity: 25,
-                    has_computers: true,
-                    features: 'Phòng máy tính, 30 PC',
-                    is_active: false
-                }
-            ];
+            const result = await get_all_rooms();
             
-            set_rooms(mock_rooms);
+            if (result.success) {
+                set_rooms(result.rooms || []);
+                console.log('Successfully loaded', result.rooms?.length || 0, 'rooms');
+            } else {
+                console.error('Failed to fetch rooms:', result.message);
+                set_error_message(result.message || 'Không thể tải danh sách phòng');
+                set_rooms([]);
+            }
         } catch (error) {
             console.error('API call error:', error);
+            set_error_message('Lỗi kết nối đến máy chủ');
             set_rooms([]);
         } finally {
             set_loading(false);
         }
     };
+
+    const handle_room_table_update = (data) => {
+        const { action, room } = data;
+
+        switch (action){            case 'create':
+                set_rooms(prev => [...prev, room]);
+                break;
+            case 'update':
+                    set_rooms(prev => prev.map(s => 
+                    s.room_id === room.room_id ? room : s
+                ));
+                break;
+            case 'delete':
+                set_rooms(prev => prev.filter(s => 
+                s.room_id !== room.room_id
+            ));
+               break;
+            default:
+                break;
+        }
+    }
+
+    const { emit_event } = useWebsocketConnection({
+        events: {
+            'room_table_update': handle_room_table_update
+        }
+    })
 
     useEffect(() => {
         handle_api_get_all_rooms();
@@ -97,8 +101,38 @@ function ManageRoomPage({ current_user_role }) {
         return buildings.sort();
     };
 
-    const handle_create_room = () => {
-        set_modal_mode('create');
+    const handle_modal_open = (mode, room = null) => {
+        set_modal_mode(mode);
+        set_selected_room(room);
+        
+        if (mode === 'create') {
+            set_form_data({
+                room_name: '',
+                building: '',
+                floor: 1,
+                capacity: 30,
+                has_computers: false,
+                features: '',
+                is_active: true
+            });
+        } else if (mode === 'edit' && room) {
+            set_form_data({
+                room_name: room.room_name,
+                building: room.building || '',
+                floor: room.floor,
+                capacity: room.capacity,
+                has_computers: room.has_computers,
+                features: room.features || '',
+                is_active: room.is_active
+            });
+        }
+        
+        set_error_message('');
+        set_show_modal(true);
+    };
+
+    const handle_modal_close = () => {
+        set_show_modal(false);
         set_selected_room(null);
         set_form_data({
             room_name: '',
@@ -110,51 +144,78 @@ function ManageRoomPage({ current_user_role }) {
             is_active: true
         });
         set_error_message('');
-        set_show_modal(true);
-    };
-
-    const handle_edit_room = (room) => {
-        set_modal_mode('edit');
-        set_selected_room(room);
-        set_form_data({
-            room_name: room.room_name,
-            building: room.building || '',
-            floor: room.floor,
-            capacity: room.capacity,
-            has_computers: room.has_computers,
-            features: room.features || '',
-            is_active: room.is_active
-        });
-        set_error_message('');
-        set_show_modal(true);
-    };
-
-    const handle_delete_room = (room) => {
-        set_modal_mode('delete');
-        set_selected_room(room);
-        set_show_modal(true);
     };
 
     const handle_form_submit = async (e) => {
         e.preventDefault();
         
         try {
+            set_error_message('');
+            
             if (modal_mode === 'create') {
-                // TODO: Implement create room API call
                 console.log('Creating room:', form_data);
-                // const result = await create_room(form_data);
-            } else if (modal_mode === 'edit') {
-                // TODO: Implement update room API call
-                console.log('Updating room:', selected_room.room_id, form_data);
-                // const result = await update_room(selected_room.room_id, form_data);
-            } else if (modal_mode === 'delete') {
-                // TODO: Implement delete room API call
-                console.log('Deleting room:', selected_room.room_id);
-                // const result = await delete_room(selected_room.room_id);
-            }
+                const result = await create_room(form_data);
+                
+                if (result.success) {
+                    console.log('Room created successfully:', result.room);
+                
+                    emit_event('room_created', {
+                        room_data: result.room,
+                        admin_info: current_user
+                    })
 
-            set_show_modal(false);
-            handle_api_get_all_rooms(); // Refresh the list
+                    // Update local state
+                    set_rooms(prev => [...prev, result.room]);
+
+                    handle_modal_close();
+                } else {
+                    set_error_message(result.message || 'Không thể tạo phòng mới');
+                    return;
+                }
+            } else if (modal_mode === 'edit') {
+                console.log('Updating room:', selected_room.room_id, form_data);
+                const result = await update_room(selected_room.room_id, form_data);
+                
+                if (result.success) {
+                    console.log('Room updated successfully:', result.room);
+
+                    emit_event('room_updated', {
+                        room_data: result.room,
+                        admin_info: current_user
+                    })
+
+                    // Update local state
+                    set_rooms(prev => prev.map(r => 
+                        r.room_id === result.room.room_id ? result.room : r
+                    ));
+
+                    handle_modal_close();
+
+                } else {
+                    set_error_message(result.message || 'Không thể cập nhật phòng');
+                    return;
+                }
+            } else if (modal_mode === 'delete') {
+                console.log('Deleting room:', selected_room.room_id);
+                const result = await delete_room(selected_room.room_id);
+                
+                if (result.success) {
+                    emit_event('room_deleted', {
+                        room_data: selected_room,
+                        admin_info: current_user
+                    });
+                    
+                    // Update local state - remove the deleted room
+                    set_rooms(prev => prev.filter(r => 
+                        r.room_id !== selected_room.room_id
+                    ));
+                
+                    handle_modal_close();
+                } else {
+                    set_error_message(result.message || 'Không thể xóa phòng');
+                    return;
+                }
+            }
         } catch (error) {
             console.error('Form submission error:', error);
             set_error_message('Đã xảy ra lỗi khi thực hiện thao tác');
@@ -171,6 +232,9 @@ function ManageRoomPage({ current_user_role }) {
 
     // Filter rooms based on search and filter criteria
     const filtered_rooms = rooms.filter(room => {
+        // Add safety check for undefined/null rooms
+        if (!room || !room.room_name) return false;
+        
         const matches_search = room.room_name.toLowerCase().includes(search_term.toLowerCase()) ||
                              (room.building && room.building.toLowerCase().includes(search_term.toLowerCase()));
         const matches_building = filter_building === 'all' || room.building === filter_building;
@@ -196,7 +260,7 @@ function ManageRoomPage({ current_user_role }) {
                             <h5 className="mb-0">🏢 Quản lý Phòng thi</h5>
                             <button 
                                 className="btn btn-success"
-                                onClick={handle_create_room}
+                                onClick={() => handle_modal_open('create')}
                             >
                                 <i className="bi bi-plus-circle me-2"></i>
                                 Thêm phòng mới
@@ -270,6 +334,7 @@ function ManageRoomPage({ current_user_role }) {
                                                 <th scope="col">Sức chứa</th>
                                                 <th scope="col">Máy tính</th>
                                                 <th scope="col">Tính năng</th>
+                                                <th scope="col">Trạng thái thi</th>
                                                 <th scope="col">Trạng thái</th>
                                                 <th scope="col">Thao tác</th>
                                             </tr>
@@ -277,7 +342,7 @@ function ManageRoomPage({ current_user_role }) {
                                         <tbody>
                                             {filtered_rooms.length === 0 ? (
                                                 <tr>
-                                                    <td colSpan="8" className="text-center py-4 text-muted">
+                                                    <td colSpan="9" className="text-center py-4 text-muted">
                                                         <i className="bi bi-inbox fs-1 d-block mb-2"></i>
                                                         Không có phòng nào
                                                     </td>
@@ -321,6 +386,27 @@ function ManageRoomPage({ current_user_role }) {
                                                             </div>
                                                         </td>
                                                         <td>
+                                                            {room.exam_status ? (
+                                                                <div>
+                                                                    <span className={`badge ${room.exam_status.status_class}`}>
+                                                                        {room.exam_status.status_text}
+                                                                    </span>
+                                                                    {room.exam_status.current_exam && (
+                                                                        <div className="small text-muted mt-1">
+                                                                            {room.exam_status.current_exam.title}
+                                                                        </div>
+                                                                    )}
+                                                                    {room.exam_status.upcoming_exams && room.exam_status.upcoming_exams.length > 0 && (
+                                                                        <div className="small text-muted mt-1">
+                                                                            Kế tiếp: {room.exam_status.upcoming_exams[0].title}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            ) : (
+                                                                <span className="badge bg-secondary">Đang tải...</span>
+                                                            )}
+                                                        </td>
+                                                        <td>
                                                             <span className={`badge ${get_status_badge_class(room.is_active)}`}>
                                                                 {get_status_text(room.is_active)}
                                                             </span>
@@ -329,14 +415,14 @@ function ManageRoomPage({ current_user_role }) {
                                                             <div className="btn-group btn-group-sm" role="group">
                                                                 <button
                                                                     className="btn btn-outline-primary"
-                                                                    onClick={() => handle_edit_room(room)}
+                                                                    onClick={() => handle_modal_open('edit', room)}
                                                                     title="Chỉnh sửa"
                                                                 >
                                                                     <i className="bi bi-pencil"></i>
                                                                 </button>
                                                                 <button
                                                                     className="btn btn-outline-danger"
-                                                                    onClick={() => handle_delete_room(room)}
+                                                                    onClick={() => handle_modal_open('delete', room)}
                                                                     title="Xóa"
                                                                 >
                                                                     <i className="bi bi-trash"></i>
@@ -369,7 +455,7 @@ function ManageRoomPage({ current_user_role }) {
                                 <button 
                                     type="button" 
                                     className="btn-close"
-                                    onClick={() => set_show_modal(false)}
+                                    onClick={handle_modal_close}
                                 ></button>
                             </div>
                             
@@ -518,7 +604,7 @@ function ManageRoomPage({ current_user_role }) {
                                     <button 
                                         type="button" 
                                         className="btn btn-secondary"
-                                        onClick={() => set_show_modal(false)}
+                                        onClick={handle_modal_close}
                                     >
                                         Hủy
                                     </button>

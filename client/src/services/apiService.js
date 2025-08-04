@@ -528,3 +528,206 @@ export const deleteNotification = (notification_id) =>
 	api_call(`/api/notifications/${notification_id}`, {
 		method: "DELETE",
 	});
+
+// ============================================================================
+// ROOM MANAGEMENT (Admin Role Required)
+// ============================================================================
+
+/**
+ * Get all rooms with optional filtering
+ * 
+ * Retrieves all exam rooms from the system with support for filtering
+ * by building, status, capacity, and other criteria.
+ * 
+ * @param {Object} [filters={}] - Optional filter parameters
+ * @param {string} [filters.building] - Filter by building name
+ * @param {boolean} [filters.is_active] - Filter by active status
+ * @param {number} [filters.min_capacity] - Filter by minimum capacity
+ * @param {boolean} [filters.has_computers] - Filter by computer availability
+ * @returns {Promise<Object>} Response containing room list
+ * @returns {boolean} returns.success - Whether the request was successful
+ * @returns {Array<Object>} returns.rooms - Array of room objects
+ * @returns {number} returns.rooms[].room_id - Unique room identifier
+ * @returns {string} returns.rooms[].room_name - Room name/number
+ * @returns {string} returns.rooms[].building - Building name
+ * @returns {number} returns.rooms[].floor - Floor number
+ * @returns {number} returns.rooms[].capacity - Maximum capacity
+ * @returns {boolean} returns.rooms[].has_computers - Computer availability
+ * @returns {string} returns.rooms[].features - Room features description
+ * @returns {boolean} returns.rooms[].is_active - Room status
+ * 
+ * @example
+ * // Get all rooms
+ * const result = await get_all_rooms();
+ * if (result.success) {
+ *     console.log('Found', result.rooms.length, 'rooms');
+ * }
+ * 
+ * @example
+ * // Get active rooms with computers in building A
+ * const result = await get_all_rooms({
+ *     building: 'Tòa nhà A',
+ *     is_active: true,
+ *     has_computers: true
+ * });
+ */
+export const get_all_rooms = (filters = {}) => {
+	const query_params = new URLSearchParams(filters).toString();
+	const endpoint = `/api/rooms/get-all-rooms${query_params ? `?${query_params}` : ""}`;
+	return api_call(endpoint, { method: "GET" });
+};
+
+/**
+ * Create a new room
+ * 
+ * Admin-only endpoint for creating new exam rooms. Validates room data
+ * and ensures room names are unique within the same building.
+ * 
+ * @requires Admin role authentication
+ * @param {Object} room_data - New room data
+ * @param {string} room_data.room_name - Room name/number (required)
+ * @param {string} [room_data.building] - Building name
+ * @param {number} room_data.floor - Floor number (default: 1)
+ * @param {number} room_data.capacity - Maximum capacity (required)
+ * @param {boolean} [room_data.has_computers=false] - Computer availability
+ * @param {string} [room_data.features] - Room features description
+ * @param {boolean} [room_data.is_active=true] - Room status
+ * @returns {Promise<Object>} Response containing created room
+ * @returns {boolean} returns.success - Whether creation was successful
+ * @returns {Object} [returns.room] - Created room data
+ * @returns {string} [returns.message] - Success/error message
+ * 
+ * @throws {Error} 400 Bad Request if validation fails
+ * @throws {Error} 409 Conflict if room name already exists in building
+ * @throws {Error} 403 Forbidden if user lacks admin privileges
+ * 
+ * @example
+ * // Create new room
+ * const result = await create_room({
+ *     room_name: 'Phòng A1',
+ *     building: 'Tòa nhà A',
+ *     floor: 1,
+ *     capacity: 40,
+ *     has_computers: true,
+ *     features: 'Máy chiếu, Điều hòa, Wifi'
+ * });
+ * 
+ * if (result.success) {
+ *     console.log('Room created:', result.room);
+ * }
+ */
+export const create_room = (room_data) =>
+	api_call("/api/rooms/create-room", {
+		method: "POST",
+		body: JSON.stringify(room_data),
+	});
+
+/**
+ * Update an existing room
+ * 
+ * Admin-only endpoint for updating room information. Allows partial updates
+ * and validates that room names remain unique within buildings.
+ * 
+ * @requires Admin role authentication
+ * @param {number} room_id - ID of the room to update
+ * @param {Object} room_data - Updated room data (partial)
+ * @param {string} [room_data.room_name] - Room name/number
+ * @param {string} [room_data.building] - Building name
+ * @param {number} [room_data.floor] - Floor number
+ * @param {number} [room_data.capacity] - Maximum capacity
+ * @param {boolean} [room_data.has_computers] - Computer availability
+ * @param {string} [room_data.features] - Room features description
+ * @param {boolean} [room_data.is_active] - Room status
+ * @returns {Promise<Object>} Response containing updated room
+ * @returns {boolean} returns.success - Whether update was successful
+ * @returns {Object} [returns.room] - Updated room data
+ * @returns {string} [returns.message] - Success/error message
+ * 
+ * @throws {Error} 400 Bad Request if validation fails
+ * @throws {Error} 404 Not Found if room doesn't exist
+ * @throws {Error} 409 Conflict if room name conflicts
+ * @throws {Error} 403 Forbidden if user lacks admin privileges
+ * 
+ * @example
+ * // Update room capacity and features
+ * const result = await update_room(1, {
+ *     capacity: 45,
+ *     features: 'Máy chiếu, Điều hòa, Wifi, Bảng thông minh'
+ * });
+ * 
+ * if (result.success) {
+ *     console.log('Room updated:', result.room);
+ * }
+ */
+export const update_room = (room_id, room_data) =>
+	api_call(`/api/rooms/update-room/${room_id}`, {
+		method: "PUT",
+		body: JSON.stringify(room_data),
+	});
+
+/**
+ * Delete a room
+ * 
+ * Admin-only endpoint for removing rooms from the system. Performs safety
+ * checks to ensure the room is not currently assigned to any active exams
+ * before deletion.
+ * 
+ * @requires Admin role authentication
+ * @param {number} room_id - ID of the room to delete
+ * @returns {Promise<Object>} Response containing deletion result
+ * @returns {boolean} returns.success - Whether deletion was successful
+ * @returns {string} [returns.message] - Success/error message
+ * 
+ * @throws {Error} 400 Bad Request if room is currently in use
+ * @throws {Error} 404 Not Found if room doesn't exist
+ * @throws {Error} 403 Forbidden if user lacks admin privileges
+ * 
+ * @example
+ * // Delete room
+ * const result = await delete_room(5);
+ * if (result.success) {
+ *     console.log('Room deleted successfully');
+ * } else {
+ *     console.error('Failed to delete room:', result.message);
+ * }
+ */
+export const delete_room = (room_id) =>
+	api_call(`/api/rooms/delete-room/${room_id}`, {
+		method: "DELETE",
+	});
+
+/**
+ * Get current exam status for a room
+ * 
+ * Retrieves the current exam status for a specific room, including whether
+ * it's currently being used for an exam, scheduled for upcoming exams, or available.
+ * 
+ * @requires Admin role authentication
+ * @param {number} room_id - ID of the room to check status
+ * @returns {Promise<Object>} Response containing room exam status
+ * @returns {boolean} returns.success - Whether the request was successful
+ * @returns {Object} returns.exam_status - Room exam status information
+ * @returns {string} returns.exam_status.status - 'available', 'in_exam', 'scheduled'
+ * @returns {string} returns.exam_status.status_text - Vietnamese status text
+ * @returns {string} returns.exam_status.status_class - CSS class for Bootstrap styling
+ * @returns {Object} [returns.exam_status.current_exam] - Current exam details if active
+ * @returns {Array} [returns.exam_status.upcoming_exams] - Upcoming exams in next 24h
+ * @returns {string} [returns.message] - Success/error message
+ * 
+ * @throws {Error} 404 Not Found if room doesn't exist
+ * @throws {Error} 403 Forbidden if user lacks admin privileges
+ * 
+ * @example
+ * // Get room exam status
+ * const result = await get_room_exam_status(1);
+ * if (result.success) {
+ *     const { status, status_text, current_exam } = result.exam_status;
+ *     if (status === 'in_exam') {
+ *         console.log(`Room is currently in exam: ${current_exam.title}`);
+ *     }
+ * }
+ */
+export const get_room_exam_status = (room_id) =>
+	api_call(`/api/rooms/exam-status/${room_id}`, {
+		method: "GET",
+	});

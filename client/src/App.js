@@ -306,19 +306,19 @@ function AppContent({
 						{/* Admin Routes */}
 						<Route
 							path="/admin/manage-user"
-							element={<ManageUserPage current_user_role={current_user_role} />}
+							element={<ManageUserPage current_user={current_user_id} current_user_role={current_user_role} />}
 						/>
 						<Route
 							path="/admin/manage-schedule"
-							element={<ManageSchedulePage current_user_role={current_user_role} />}
+							element={<ManageSchedulePage current_user={current_user_id} current_user_role={current_user_role} />}
 						/>
 						<Route
 							path="/admin/manage-exam"
-							element={<ManageExamPage current_user_role={current_user_role} />}
+							element={<ManageExamPage current_user={current_user_id} current_user_role={current_user_role} />}
 						/>
 						<Route
 							path="/admin/manage-room"
-							element={<ManageRoomPage current_user_role={current_user_role} />}
+							element={<ManageRoomPage current_user={current_user_id} current_user_role={current_user_role} />}
 						/>
 						<Route
 							path="/admin/manage-subject"
