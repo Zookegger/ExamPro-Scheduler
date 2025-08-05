@@ -260,6 +260,8 @@ async function deleteSubject(req, res, next) {
         await transaction.commit();
         console.log(`✅ Subject "${subjectToDelete.subject_name}" deleted successfully with transaction`);
 
+        emit_subject_table_update()
+
         return res.status(200).json({
             success: true,
             message: "Xóa môn học thành công",

@@ -1,9 +1,11 @@
 import React, { useEffect, useState, useCallback, useMemo} from 'react';
 import Breadcrumb from '../../components/Breadcrumb';
+import ScheduleOptimizer from '../../components/ScheduleOptimizer';
 import useWebsocketConnection from '../../hooks/use_websocket_connection';
 import { 
     getScheduleOverview, 
-    getUnassignedData, 
+    getUnassignedData,
+    getScheduleConflicts, 
     getAllRooms, 
     getAllSubjects, 
     assignStudentsToExam, 
@@ -37,6 +39,7 @@ function ManageSchedulePage() {
     const [selected_exam_for_assignment, set_selected_exam_for_assignment] = useState(null);
     const [show_assignment_modal, set_show_assignment_modal] = useState(false);
     const [assignment_type, set_assignment_type] = useState('student'); // 'student' or 'proctor'
+    const [show_optimizer_widget, set_show_optimizer_widget] = useState(true); // Show conflict optimizer by default
     
     // Filter states
     const [filter_start_date, set_filter_start_date] = useState('');
@@ -106,8 +109,107 @@ function ManageSchedulePage() {
         }
     }, []);
 
+    // ====================================================================
+    // WEBSOCKET EVENT HANDLERS & CONNECTION
+    // ====================================================================
+    const handle_schedule_stats_update = useCallback((data) => {
+        console.log('📊 Schedule stats updated:', data);
+        
+        if (data.unregistered_students) {
+            set_unregistered_students(data.unregistered_students);
+        }
+        if (data.unassigned_proctors) {
+            set_unassigned_proctors(data.unassigned_proctors);
+        }
+        
+        // Refresh schedule overview to get updated registration counts
+        load_schedule_overview();
+    }, [load_schedule_overview]);
+
+    const handle_assignment_notification = useCallback((notification) => {
+        console.log('🔔 Assignment notification:', notification);
+        
+        // Show toast notification to user (you could implement a toast system here)
+        console.log(`📣 ${notification.message || 'Cập nhật phân công mới'}`);
+        
+        // Refresh data when assignments are made
+        if (notification.type === 'student_assigned' || notification.type === 'proctor_assigned') {
+            Promise.all([
+                load_schedule_overview(),
+                load_unassigned_data()
+            ]);
+        }
+    }, [load_schedule_overview, load_unassigned_data]);
+
+    const handle_assignment_error = useCallback((error_data) => {
+        console.error('❌ Assignment error:', error_data);
+        
+        // Show error message to user
+        const message = error_data.message || 'Có lỗi xảy ra khi phân công';
+        alert(`Lỗi: ${message}`);
+        
+        // Still refresh data in case there were partial changes
+        Promise.all([
+            load_schedule_overview(),
+            load_unassigned_data()
+        ]);
+    }, [load_schedule_overview, load_unassigned_data]);
+
+    // WebSocket events configuration
+    const ws_events = useMemo(() => ({
+        'student_assignment_update': handle_schedule_stats_update,
+        'assignment_notification': handle_assignment_notification,
+        'assignment_error': handle_assignment_error
+    }), [handle_schedule_stats_update, handle_assignment_notification, handle_assignment_error]);
+
+    const { 
+        connection_status, 
+        emit_event, 
+        is_connected,
+        is_authenticated
+    } = useWebsocketConnection({
+        events: ws_events,
+        debug: true
+    });
+
+    // ====================================================================
+    // ENHANCED ASSIGNMENT FUNCTIONS (with WebSocket + API fallback)
+    // ====================================================================
+
     const assign_students_to_exam = useCallback(async (exam_id, student_ids) => {
         try {
+            // Try WebSocket first for real-time updates
+            if (is_connected && is_authenticated) {
+                console.log('📡 Using WebSocket for student assignment...');
+                
+                // Send assignment requests via WebSocket for real-time updates
+                const assignment_promises = student_ids.map(student_id => {
+                    return new Promise((resolve) => {
+                        const success = emit_event('assign_student_to_exam', {
+                            student_id: student_id,
+                            exam_id: exam_id,
+                            timestamp: new Date().toISOString()
+                        });
+                        resolve(success);
+                    });
+                });
+
+                const results = await Promise.all(assignment_promises);
+                const successful_assignments = results.filter(success => success).length;
+                
+                if (successful_assignments > 0) {
+                    return { 
+                        success: true, 
+                        message: `Đã phân công ${successful_assignments}/${student_ids.length} học sinh qua WebSocket` 
+                    };
+                } else {
+                    // Fallback to API if WebSocket fails
+                    console.log('⚠️ WebSocket assignment failed, falling back to API...');
+                }
+            }
+
+            // Fallback to REST API
+            console.log('📡 Using REST API for student assignment...');
             const response = await assignStudentsToExam(exam_id, student_ids, 'approved');
 
             if (response.success) {
@@ -123,10 +225,44 @@ function ManageSchedulePage() {
             console.error('Error assigning students:', error);
             return { success: false, message: 'Lỗi kết nối máy chủ' };
         }
-    }, [load_schedule_overview, load_unassigned_data]);
+    }, [load_schedule_overview, load_unassigned_data, is_connected, is_authenticated, emit_event]);
 
     const assign_proctors_to_exam = useCallback(async (exam_id, proctor_assignments) => {
         try {
+            // Try WebSocket first for real-time updates
+            if (is_connected && is_authenticated) {
+                console.log('📡 Using WebSocket for proctor assignment...');
+                
+                // Send assignment requests via WebSocket for real-time updates
+                const assignment_promises = proctor_assignments.map(assignment => {
+                    return new Promise((resolve) => {
+                        const success = emit_event('assign_proctor_to_exam', {
+                            proctor_id: assignment.proctor_id,
+                            exam_id: exam_id,
+                            role: assignment.role || 'assistant',
+                            notes: assignment.notes || 'Được phân công từ lập lịch thi',
+                            timestamp: new Date().toISOString()
+                        });
+                        resolve(success);
+                    });
+                });
+
+                const results = await Promise.all(assignment_promises);
+                const successful_assignments = results.filter(success => success).length;
+                
+                if (successful_assignments > 0) {
+                    return { 
+                        success: true, 
+                        message: `Đã phân công ${successful_assignments}/${proctor_assignments.length} giám thị qua WebSocket` 
+                    };
+                } else {
+                    // Fallback to API if WebSocket fails
+                    console.log('⚠️ WebSocket assignment failed, falling back to API...');
+                }
+            }
+
+            // Fallback to REST API
+            console.log('📡 Using REST API for proctor assignment...');
             const response = await assignProctorsToExam(exam_id, proctor_assignments);
 
             if (response.success) {
@@ -142,7 +278,7 @@ function ManageSchedulePage() {
             console.error('Error assigning proctors:', error);
             return { success: false, message: 'Lỗi kết nối máy chủ' };
         }
-    }, [load_schedule_overview, load_unassigned_data]);
+    }, [load_schedule_overview, load_unassigned_data, is_connected, is_authenticated, emit_event]);
 
     // ====================================================================
     // EVENT HANDLERS
@@ -309,38 +445,41 @@ function ManageSchedulePage() {
     }, [schedule_overview, get_exam_status_badge, open_assignment_modal]);
 
     // ====================================================================
-    // EFFECTS - WEBSOCKET CONNECTION
+    // EFFECTS - WEBSOCKET CONNECTION & DATA LOADING
     // ====================================================================
-    const handle_student_assignment_update = useCallback((data) => {
-        console.log('📊 Student assignment updated:', data);
-        set_unregistered_students(data.unregistered_students || []);
-        set_unassigned_proctors(data.unassigned_proctors || []);
-    }, []);
-
-    const handle_assignment_notification = useCallback((notification) => {
-        console.log('🔔 New assignment notification:', notification);
-    }, []);
-
-    const ws_events = useMemo(() => ({
-        student_assignment_update: handle_student_assignment_update,
-        assignment_notification: handle_assignment_notification
-    }), [handle_student_assignment_update, handle_assignment_notification]);
-
-    const { 
-        connection_status, 
-        emit_event, 
-        is_connected 
-    } = useWebsocketConnection({
-        events: ws_events,
-        debug: true
-    });
     
-    // Request initial stats when connected
+    // Request live stats when WebSocket connects and is authenticated
     useEffect(() => {
-        if (is_connected) {
-            emit_event('request_live_stats');
+        if (is_connected && is_authenticated) {
+            console.log('📡 WebSocket authenticated, requesting live stats...');
+            
+            // Request initial live stats
+            const success = emit_event('request_live_stats', {
+                timestamp: new Date().toISOString()
+            });
+            
+            if (success) {
+                console.log('✅ Live stats request sent');
+            } else {
+                console.log('❌ Failed to send live stats request');
+            }
         }
-    }, [is_connected, emit_event]);
+    }, [is_connected, is_authenticated, emit_event]);
+
+    // Periodic stats refresh (every 30 seconds when connected)
+    useEffect(() => {
+        if (!is_connected || !is_authenticated) return;
+
+        const interval = setInterval(() => {
+            console.log('🔄 Requesting periodic stats update...');
+            emit_event('request_live_stats', {
+                timestamp: new Date().toISOString(),
+                periodic: true
+            });
+        }, 30000); // 30 seconds
+
+        return () => clearInterval(interval);
+    }, [is_connected, is_authenticated, emit_event]);
 
     // ====================================================================
     // EFFECTS - INITIAL DATA LOADING
@@ -359,6 +498,65 @@ function ManageSchedulePage() {
     return (
         <div className="container-fluid py-4">
             <Breadcrumb items={breadcrumb_items} />
+            
+            {/* Schedule Optimizer Widget */}
+            {show_optimizer_widget && (
+                <div className="row mb-4">
+                    <div className="col-md-8">
+                        <ScheduleOptimizer
+                            filters={{
+                                start_date: filter_start_date,
+                                end_date: filter_end_date
+                            }}
+                            embedded={true}
+                            autoRefresh={true}
+                            refreshInterval={30000}
+                        />
+                    </div>
+                    <div className="col-md-4">
+                        <div className="card border-0 shadow-sm">
+                            <div className="card-header bg-light d-flex justify-content-between align-items-center">
+                                <div>
+                                    <i className="bi bi-toggles me-2"></i>
+                                    <strong>Cài đặt hiển thị</strong>
+                                </div>
+                            </div>
+                            <div className="card-body p-3">
+                                <div className="form-check form-switch">
+                                    <input 
+                                        className="form-check-input" 
+                                        type="checkbox" 
+                                        id="toggleOptimizer"
+                                        checked={show_optimizer_widget}
+                                        onChange={(e) => set_show_optimizer_widget(e.target.checked)}
+                                    />
+                                    <label className="form-check-label" htmlFor="toggleOptimizer">
+                                        Hiển thị trình tối ưu
+                                    </label>
+                                </div>
+                                <small className="text-muted d-block mt-2">
+                                    Bật/tắt hiển thị widget phân tích xung đột lịch thi trong thời gian thực
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+            
+            {/* Toggle button when widget is hidden */}
+            {!show_optimizer_widget && (
+                <div className="row mb-3">
+                    <div className="col-12">
+                        <button 
+                            className="btn btn-outline-primary btn-sm"
+                            onClick={() => set_show_optimizer_widget(true)}
+                        >
+                            <i className="bi bi-shield-exclamation me-2"></i>
+                            Hiển thị trình tối ưu lịch thi
+                        </button>
+                    </div>
+                </div>
+            )}
             
             {/* Main Card */}
             <div className="card">
@@ -575,12 +773,17 @@ function ManageSchedulePage() {
 
                     {/* WebSocket connection status */}
                     <div className="alert alert-info d-flex align-items-center mt-3">
-                        <i className={`bi ${connection_status === 'connected' ? 'bi-wifi text-success' : 'bi-wifi-off text-danger'} me-2`}></i>
+                        <i className={`bi ${is_connected ? 'bi-wifi text-success' : 'bi-wifi-off text-danger'} me-2`}></i>
                         <span>
                             Trạng thái kết nối: 
-                            <strong className={connection_status === 'connected' ? 'text-success' : 'text-danger'}>
-                                {connection_status === 'connected' ? ' Đã kết nối' : ' Mất kết nối'}
+                            <strong className={is_connected ? 'text-success' : 'text-danger'}>
+                                {is_connected ? (is_authenticated ? ' Đã kết nối & xác thực' : ' Đã kết nối (chưa xác thực)') : ' Mất kết nối'}
                             </strong>
+                            {is_connected && (
+                                <small className="ms-2 text-muted">
+                                    Real-time updates {is_authenticated ? 'enabled' : 'pending authentication'}
+                                </small>
+                            )}
                         </span>
                     </div>
                 </div>

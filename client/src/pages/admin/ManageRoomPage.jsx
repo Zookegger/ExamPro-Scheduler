@@ -112,8 +112,7 @@ function ManageRoomPage({ current_user, current_user_role }) {
 
     // Initialize WebSocket connection
     const { is_connected, emit_event } = useWebsocketConnection({
-        events: room_websocket_events,
-        auto_connect: true
+        events: room_websocket_events
     });
 
     // Helper functions for exam status display
@@ -263,12 +262,12 @@ function ManageRoomPage({ current_user, current_user_role }) {
                     console.log('Room created successfully:', result.room);
                 
                     emit_event('room_created', {
-                        room_data: result.room,
+                        room_data: result.data,
                         admin_info: current_user
                     })
 
                     // Update local state
-                    set_rooms(prev => [...prev, result.room]);
+                    set_rooms(prev => [...prev, result.data]);
 
                     handle_modal_close();
                 } else {
@@ -283,13 +282,13 @@ function ManageRoomPage({ current_user, current_user_role }) {
                     console.log('Room updated successfully:', result.room);
 
                     emit_event('room_updated', {
-                        room_data: result.room,
+                        room_data: result.data,
                         admin_info: current_user
                     })
 
                     // Update local state
                     set_rooms(prev => prev.map(r => 
-                        r.room_id === result.room.room_id ? result.room : r
+                        r.room_id === result.room.room_id ? result.data : r
                     ));
 
                     handle_modal_close();
@@ -304,13 +303,13 @@ function ManageRoomPage({ current_user, current_user_role }) {
                 
                 if (result.success) {
                     emit_event('room_deleted', {
-                        room_data: selected_room,
+                        room_data: result.data,
                         admin_info: current_user
                     });
                     
                     // Update local state - remove the deleted room
                     set_rooms(prev => prev.filter(r => 
-                        r.room_id !== selected_room.room_id
+                        r.room_id !== result.data.room_id ? result.data : r
                     ));
                 
                     handle_modal_close();

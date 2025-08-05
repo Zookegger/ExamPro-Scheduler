@@ -16,18 +16,46 @@ router.use(authenticate_jwt);
 
 /**
  * GET /api/schedule/overview
- * Get comprehensive schedule overview with statistics
+ * Get comprehensive schedule overview with filtering options
  * 
- * Query parameters:
- * - start_date: Filter by start date (YYYY-MM-DD)
- * - end_date: Filter by end date (YYYY-MM-DD)
- * - room_id: Filter by room ID
- * - subject_code: Filter by subject code
- * - include_stats: Include statistics (default: true)
+ * Query Parameters:
+ * - start_date: Start date filter (YYYY-MM-DD)
+ * - end_date: End date filter (YYYY-MM-DD)
+ * - room_id: Filter by specific room (number or 'all')
+ * - subject_code: Filter by specific subject (string or 'all')
+ * - include_stats: Include statistical summary (default: 'true')
+ */
+router.get('/overview', require_admin_role, schedule_controller.getScheduleOverview);
+
+/**
+ * GET /api/schedule/conflicts
+ * Analyze schedule conflicts and optimization opportunities
  * 
- * Response includes exam details with registration and proctor counts
+ * Query Parameters:
+ * - start_date: Start date filter (YYYY-MM-DD)
+ * - end_date: End date filter (YYYY-MM-DD)
+ * - severity: Filter by severity level ('critical', 'warning', 'info', 'all')
+ */
+router.get('/conflicts', require_admin_role, schedule_controller.getScheduleConflicts);
+
+/**
+ * GET /api/schedule/unassigned
+ * Get lists of unregistered students and unassigned proctors
  */
 router.get('/overview', schedule_controller.getScheduleOverview);
+
+/**
+ * GET /api/schedule/teacher-proctor-exams
+ * Get exams where the current teacher is assigned as a proctor
+ * 
+ * Query parameters:
+ * - status: Filter by exam status (upcoming, today, completed, all)
+ * - start_date: Filter by start date (YYYY-MM-DD)
+ * - end_date: Filter by end date (YYYY-MM-DD)
+ * 
+ * Returns exams with proctor role, room details, and other proctors
+ */
+router.get('/teacher-proctor-exams', schedule_controller.getTeacherProctorExams);
 
 /**
  * GET /api/schedule/unassigned

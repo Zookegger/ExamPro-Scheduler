@@ -12,3 +12,4 @@ export { default as ManageSubjectPage } from './ManageSubjectPage';
 export { default as ManageSchedulePage } from './ManageSchedulePage';
 export { default as AdminStatsDashboardPage } from './AdminStatsDashboardPage';
 export { default as AdminReportPage } from './AdminReportPage';
+export { default as ScheduleOptimizerPage } from './ScheduleOptimizerPage';

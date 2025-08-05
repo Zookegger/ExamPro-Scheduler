@@ -1,5 +1,8 @@
 const db = require('../models');
 const { Op } = require('sequelize');
+const { notifyAdmins } = require('../services/notificationService');
+
+const RESOURCE_TYPE = 'room';
 
 // WebSocket instance for real-time updates
 let websocket_io = null;
@@ -11,6 +14,20 @@ let websocket_io = null;
 function set_websocket_io(io) {
     websocket_io = io;
     console.log('🔌 WebSocket connected to room controller');
+}
+
+/**
+ * Reusable helper function to notify admins about resource changes
+ * @param {string} action - 'created', 'updated', 'deleted'
+ * @param {object} resource_data - Room information
+ * @param {object} current_user - User who performed the action
+ */
+async function notifyAdminsAboutRoom(action, resource_data, current_user) {
+    try {
+        await notifyAdmins(RESOURCE_TYPE, action, resource_data, current_user);
+    } catch (error) {
+        console.error(`❌ Error notifying admins about subject ${action}:`, error);
+    }
 }
 
 /**
@@ -321,7 +338,9 @@ async function getAllRooms(req, res) {
  *   "message": "Phòng đã được tạo thành công"
  * }
  */
-async function createRoom(req, res) {
+async function createRoom(req, res, next) {
+    const transaction = await db.utility.sequelize.transaction();
+    
     try {
         console.log('🏗️ Creating new room:', req.body);
         
@@ -407,6 +426,8 @@ async function createRoom(req, res) {
             message: 'Lỗi hệ thống khi tạo phòng mới',
             error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
         });
+        
+        next(error);
     }
 }
 
@@ -440,7 +461,7 @@ async function createRoom(req, res) {
  *   "message": "Phòng đã được cập nhật thành công"
  * }
  */
-async function updateRoom(req, res) {
+async function updateRoom(req, res, next) {
     try {
         const { room_id } = req.params;
         console.log('✏️ Updating room:', room_id, 'with data:', req.body);
@@ -541,6 +562,8 @@ async function updateRoom(req, res) {
             message: 'Lỗi hệ thống khi cập nhật phòng',
             error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
         });
+
+        next(error);
     }
 }
 
@@ -566,8 +589,18 @@ async function updateRoom(req, res) {
  *   "message": "Phòng đã được xóa thành công"
  * }
  */
-async function deleteRoom(req, res) {
+async function deleteRoom(req, res, next) {
+    const transaction = await db.utility.sequelize.transaction();
+
     try {
+        if (req.user.user_role !== ADMIN_ROLE) {
+            await transaction.rollback();
+            return res.status(403).json({
+                success: false,
+                message: ERROR_MESSAGES.PERMISSION_DENIED
+            });
+        }
+
         const { room_id } = req.params;
         console.log('🗑️ Deleting room:', room_id);
         
@@ -575,6 +608,7 @@ async function deleteRoom(req, res) {
         const room = await db.models.Room.findByPk(room_id);
         
         if (!room) {
+            await transaction.rollback();
             return res.status(404).json({
                 success: false,
                 message: 'Không tìm thấy phòng'
@@ -585,6 +619,8 @@ async function deleteRoom(req, res) {
         const exam_status = await getRoomExamStatus(room_id);
         
         if (exam_status.status === 'in_exam') {
+            await transaction.rollback();
+
             return res.status(400).json({
                 success: false,
                 message: `Không thể xóa phòng đang thi. Kỳ thi "${exam_status.current_exam.title}" đang diễn ra.`
@@ -606,6 +642,8 @@ async function deleteRoom(req, res) {
         });
         
         if (future_exams.length > 0) {
+            await transaction.rollback();
+
             return res.status(400).json({
                 success: false,
                 message: 'Không thể xóa phòng có lịch thi trong tương lai. Vui lòng hủy hoặc chuyển các kỳ thi trước.'
@@ -614,27 +652,37 @@ async function deleteRoom(req, res) {
         
         // Store room data before deletion for WebSocket emission
         const deleted_room_data = { ...room.dataValues };
-        
+        const room_name = room.room_name;
+
         // Delete the room
-        await room.destroy();
+        await room.destroy({ transaction });
+        await notifyAdminsAboutRoom('deleted', room_name, req.user)
         
-        console.log('✅ Room deleted successfully:', room_id);
+        await transaction.commit();
+
+        console.log('✅ Room deleted successfully:', room_name, ' - ', room_id);
         
         // Emit real-time update to connected clients
         emit_room_table_update('delete', deleted_room_data, req.user);
         
         res.json({
             success: true,
-            message: 'Phòng đã được xóa thành công'
+            message: 'Phòng đã được xóa thành công',
+            data: {
+                deleted_room_id: subjectId,
+                deleted_room_name: subjectToDelete.subject_name
+            }
         });
         
     } catch (error) {
+        await transaction.rollback();
         console.error('❌ Error deleting room:', error);
         res.status(500).json({
             success: false,
             message: 'Lỗi hệ thống khi xóa phòng',
-            error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+            error: error.message
         });
+        next(error);        
     }
 }
 

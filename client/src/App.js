@@ -19,6 +19,7 @@ import {
   ManageSubjectPage,
   AdminStatsDashboardPage,
   AdminReportPage,
+  ScheduleOptimizerPage,
   StudentDashboardPage,
   SubjectEnrollmentPage,
   StudentSchedulePage,
@@ -361,6 +362,15 @@ function AppContent({
               path="/admin/manage-schedule"
               element={
                 <ManageSchedulePage
+                  current_user={current_user_id}
+                  current_user_role={current_user_role}
+                />
+              }
+            />
+            <Route
+              path="/admin/schedule-optimizer"
+              element={
+                <ScheduleOptimizerPage
                   current_user={current_user_id}
                   current_user_role={current_user_role}
                 />

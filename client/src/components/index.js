@@ -6,3 +6,4 @@ export { default as RoleBasedNavigation } from './RoleBasedNavigation.jsx';
 export { default as AdminSidebar } from './AdminSidebar.jsx';
 export { default as NotificationOffcanvas } from './NotificationOffcanvas.jsx';
 export { default as RoleBasedFooter } from './RoleBasedFooter.jsx';
+export { default as ScheduleOptimizer } from './ScheduleOptimizer.jsx';

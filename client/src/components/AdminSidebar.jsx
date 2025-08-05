@@ -119,6 +119,7 @@ function AdminSidebar({
                 { path: '/admin/manage-exam', title: 'Quản lý kỳ thi', icon: 'bi-calendar-event' },
                 { path: '/admin/manage-user', title: 'Quản lý Người dùng', icon: 'bi-people' },
                 { path: '/admin/manage-schedule', title: 'Lịch Thi', icon: 'bi-calendar3' },
+                { path: '/admin/schedule-optimizer', title: 'Tối ưu Lịch Thi', icon: 'bi-shield-exclamation' },
                 { path: '/admin/manage-room', title: 'Phòng Thi', icon: 'bi-door-closed' },
                 { path: '/admin/manage-subject', title: 'Quản lý môn học', icon: 'bi-book' },
             ]

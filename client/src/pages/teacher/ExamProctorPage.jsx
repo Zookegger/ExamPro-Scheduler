@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from "react";
-import AccessDeniedPage from "../common/AccessDeniedPage";
-import Breadcrumb from "../../components/Breadcrumb";
-// TODO: import { getProctorExams, updateExamStatus } from "../../services/apiService";
+import React, { useState, useEffect } from 'react';
+import { getTeacherProctorExams } from '../../services/apiService';
+import AccessDeniedPage from '../common/AccessDeniedPage';
+import Breadcrumb from '../../components/Breadcrumb';
+// TODO: import { updateExamStatus } from "../../services/apiService";
 
 function ExamProctorPage({ current_user_role, current_user_id }) {
     // ====================================================================
@@ -13,96 +14,37 @@ function ExamProctorPage({ current_user_role, current_user_id }) {
     const [selected_exam, set_selected_exam] = useState(null);
 
     // ====================================================================
-    // MOCK DATA FOR UI DESIGN
+    // LOAD PROCTOR EXAMS DATA
     // ====================================================================
     useEffect(() => {
-        console.log('👁️ Loading proctor exams...');
+        if (!current_user_id) return;
         
-        setTimeout(() => {
-            const mock_exams = [
-                {
-                    exam_id: 1,
-                    title: 'Thi giữa kỳ Toán 12',
-                    subject_code: 'MATH12',
-                    subject_name: 'Toán học 12',
-                    exam_date: '2025-08-15',
-                    start_time: '09:00:00',
-                    end_time: '11:00:00',
-                    duration_minutes: 120,
-                    room_name: 'Phòng A1',
-                    room_capacity: 40,
-                    registered_students: 35,
-                    proctor_role: 'main_proctor',
-                    status: 'today',
-                    subject_teacher: 'Nguyễn Văn A',
-                    other_proctors: ['Trần Thị B'],
-                    exam_method: 'offline',
-                    description: 'Kỳ thi giữa học kỳ I'
-                },
-                {
-                    exam_id: 2,
-                    title: 'Thi cuối kỳ Hóa học',
-                    subject_code: 'CHEM11',
-                    subject_name: 'Hóa học 11',
-                    exam_date: '2025-08-20',
-                    start_time: '14:00:00',
-                    end_time: '16:00:00',
-                    duration_minutes: 120,
-                    room_name: 'Phòng B2',
-                    room_capacity: 35,
-                    registered_students: 28,
-                    proctor_role: 'assistant_proctor',
-                    status: 'upcoming',
-                    subject_teacher: 'Lê Thị C',
-                    other_proctors: ['Phạm Văn D'],
-                    exam_method: 'offline',
-                    description: 'Kỳ thi cuối học kỳ I'
-                },
-                {
-                    exam_id: 3,
-                    title: 'Kiểm tra 15 phút Văn',
-                    subject_code: 'LIT12',
-                    subject_name: 'Ngữ văn 12',
-                    exam_date: '2025-08-10',
-                    start_time: '10:05:00',
-                    end_time: '10:20:00',
-                    duration_minutes: 15,
-                    room_name: 'Phòng C1',
-                    room_capacity: 32,
-                    registered_students: 30,
-                    proctor_role: 'main_proctor',
-                    status: 'completed',
-                    subject_teacher: 'Hoàng Thị E',
-                    other_proctors: [],
-                    exam_method: 'offline',
-                    description: 'Kiểm tra định kỳ',
-                    completed_time: '2025-08-10T10:25:00'
-                },
-                {
-                    exam_id: 4,
-                    title: 'Thi thử THPT Quốc gia - Toán',
-                    subject_code: 'MATH12',
-                    subject_name: 'Toán học 12',
-                    exam_date: '2025-08-25',
-                    start_time: '08:00:00',
-                    end_time: '11:30:00',
-                    duration_minutes: 210,
-                    room_name: 'Hội trường lớn',
-                    room_capacity: 100,
-                    registered_students: 85,
-                    proctor_role: 'assistant_proctor',
-                    status: 'upcoming',
-                    subject_teacher: 'Nguyễn Văn A',
-                    other_proctors: ['Trần Thị B', 'Lê Văn F'],
-                    exam_method: 'offline',
-                    description: 'Kỳ thi thử THPT Quốc gia năm 2025'
+        const loadProctorExams = async () => {
+            console.log('👁️ Loading proctor exams...');
+            set_loading(true);
+            
+            try {
+                const response = await getTeacherProctorExams({
+                    status: filter_status === 'all' ? undefined : filter_status
+                });
+                
+                if (response.success) {
+                    set_exams_data(response.data);
+                    console.log(`✅ Loaded ${response.count} proctor exams`);
+                } else {
+                    console.error('❌ Failed to load proctor exams:', response.message);
+                    set_exams_data([]);
                 }
-            ];
+            } catch (error) {
+                console.error('❌ Error loading proctor exams:', error);
+                set_exams_data([]);
+            } finally {
+                set_loading(false);
+            }
+        };
 
-            set_exams_data(mock_exams);
-            set_loading(false);
-        }, 1000);
-    }, [current_user_id]);
+        loadProctorExams();
+    }, [current_user_id, filter_status]);
 
     // ====================================================================
     // HELPER FUNCTIONS

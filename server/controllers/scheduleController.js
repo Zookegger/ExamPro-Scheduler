@@ -129,6 +129,178 @@ const schedule_controller = {
     },
 
     /**
+     * Get comprehensive schedule conflicts and warnings
+     * 
+     * @param {Object} req - Request with query parameters
+     * @param {Object} res - Response object
+     * @returns {Object} JSON response with conflict analysis
+     */
+    getScheduleConflicts: async (req, res) => {
+        try {
+            const {
+                start_date,
+                end_date,
+                severity = 'all' // 'critical', 'warning', 'info', 'all'
+            } = req.query;
+
+            // Build date filter
+            const date_filter = {};
+            if (start_date && start_date.trim() !== '') {
+                date_filter[Op.gte] = start_date;
+            }
+            if (end_date && end_date.trim() !== '') {
+                date_filter[Op.lte] = end_date;
+            }
+
+            const where_clause = {};
+            if (Object.keys(date_filter).length > 0) {
+                where_clause.exam_date = date_filter;
+            }
+
+            console.log('🔍 Analyzing schedule conflicts with filter:', JSON.stringify(where_clause, null, 2));
+
+            // Get all exams in the specified period
+            const exams = await Exam.findAll({
+                where: where_clause,
+                include: [
+                    {
+                        model: Room,
+                        as: 'room',
+                        attributes: ['room_id', 'room_name', 'capacity'],
+                        required: false
+                    },
+                    {
+                        model: Subject,
+                        as: 'subject',
+                        attributes: ['subject_name'],
+                        required: false
+                    }
+                ],
+                order: [['exam_date', 'ASC'], ['start_time', 'ASC']]
+            });
+
+            // Analyze different types of conflicts
+            const room_conflicts = await analyzeRoomConflicts(exams);
+            const proctor_conflicts = await analyzeProctorConflicts(exams);
+            const capacity_warnings = await analyzeCapacityIssues(exams);
+            const time_optimization = await analyzeTimeOptimization(exams);
+            const resource_efficiency = await analyzeResourceEfficiency(exams);
+
+            // Categorize by severity
+            const conflicts = {
+                critical: [],
+                warning: [],
+                info: []
+            };
+
+            // Room conflicts (critical)
+            room_conflicts.forEach(conflict => {
+                conflicts.critical.push({
+                    type: 'room_conflict',
+                    severity: 'critical',
+                    title: `Xung đột phòng thi: ${conflict.room_name}`,
+                    description: `${conflict.conflicting_exams.length} kỳ thi cùng thời gian`,
+                    details: conflict,
+                    icon: 'bi-exclamation-triangle-fill',
+                    color: 'danger'
+                });
+            });
+
+            // Proctor conflicts (critical)
+            proctor_conflicts.forEach(conflict => {
+                conflicts.critical.push({
+                    type: 'proctor_conflict',
+                    severity: 'critical',
+                    title: `Xung đột giám thị: ${conflict.proctor_name}`,
+                    description: `Được phân công ${conflict.conflicting_exams.length} kỳ thi cùng lúc`,
+                    details: conflict,
+                    icon: 'bi-person-exclamation',
+                    color: 'danger'
+                });
+            });
+
+            // Capacity issues (warning)
+            capacity_warnings.forEach(warning => {
+                conflicts.warning.push({
+                    type: 'capacity_issue',
+                    severity: 'warning',
+                    title: warning.type === 'overcapacity' ? 'Vượt quá sức chứa phòng' : 'Thiếu giám thị',
+                    description: warning.message,
+                    details: warning,
+                    icon: warning.type === 'overcapacity' ? 'bi-people-fill' : 'bi-person-badge',
+                    color: 'warning'
+                });
+            });
+
+            // Time optimization suggestions (info)
+            time_optimization.forEach(suggestion => {
+                conflicts.info.push({
+                    type: 'time_optimization',
+                    severity: 'info',
+                    title: 'Tối ưu hóa thời gian',
+                    description: suggestion.message,
+                    details: suggestion,
+                    icon: 'bi-clock-history',
+                    color: 'info'
+                });
+            });
+
+            // Resource efficiency suggestions (info)
+            resource_efficiency.forEach(suggestion => {
+                conflicts.info.push({
+                    type: 'resource_efficiency',
+                    severity: 'info',
+                    title: 'Tối ưu hóa tài nguyên',
+                    description: suggestion.message,
+                    details: suggestion,
+                    icon: 'bi-diagram-3',
+                    color: 'info'
+                });
+            });
+
+            // Filter by severity if specified
+            let filtered_conflicts = [];
+            if (severity === 'all') {
+                filtered_conflicts = [
+                    ...conflicts.critical,
+                    ...conflicts.warning,
+                    ...conflicts.info
+                ];
+            } else {
+                filtered_conflicts = conflicts[severity] || [];
+            }
+
+            // Calculate summary statistics
+            const summary = {
+                total_conflicts: conflicts.critical.length + conflicts.warning.length + conflicts.info.length,
+                critical_count: conflicts.critical.length,
+                warning_count: conflicts.warning.length,
+                info_count: conflicts.info.length,
+                exams_analyzed: exams.length
+            };
+
+            res.json({
+                success: true,
+                data: filtered_conflicts,
+                summary,
+                conflicts_by_severity: {
+                    critical: conflicts.critical.length,
+                    warning: conflicts.warning.length,
+                    info: conflicts.info.length
+                }
+            });
+
+        } catch (error) {
+            console.error('Error analyzing schedule conflicts:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Không thể phân tích xung đột lịch thi',
+                error: error.message
+            });
+        }
+    },
+
+    /**
      * Get unassigned students and proctors
      * 
      * @param {Object} req - Request object
@@ -493,6 +665,148 @@ const schedule_controller = {
                 error: error.message
             });
         }
+    },
+
+    /**
+     * Get exams where the current teacher is assigned as a proctor
+     * 
+     * @param {Object} req - Request with user authentication and query parameters
+     * @param {Object} res - Response object
+     * @returns {Object} JSON response with teacher's proctor exams
+     */
+    getTeacherProctorExams: async (req, res) => {
+        try {
+            const teacher_id = req.user.user_id;
+            const {
+                status,
+                start_date,
+                end_date
+            } = req.query;
+
+            console.log(`🔍 Getting proctor exams for teacher ${teacher_id}`);
+
+            // Build date filter
+            const date_filter = {};
+            if (start_date && start_date.trim() !== '') {
+                date_filter[Op.gte] = start_date;
+            }
+            if (end_date && end_date.trim() !== '') {
+                date_filter[Op.lte] = end_date;
+            }
+
+            // Build where clause for exams
+            const exam_where_clause = {};
+            if (Object.keys(date_filter).length > 0) {
+                exam_where_clause.exam_date = date_filter;
+            }
+            if (status && status !== 'all') {
+                exam_where_clause.status = status;
+            }
+
+            // Get exams where this teacher is a proctor
+            const proctor_exams = await Exam.findAll({
+                where: exam_where_clause,
+                include: [
+                    {
+                        model: ExamProctor,
+                        as: 'exam_proctors',
+                        where: { proctor_id: teacher_id },
+                        attributes: ['role', 'notes', 'created_at'],
+                        required: true
+                    },
+                    {
+                        model: Room,
+                        as: 'room',
+                        attributes: ['room_id', 'room_name', 'capacity', 'building'],
+                        required: false
+                    },
+                    {
+                        model: Subject,
+                        as: 'subject',
+                        attributes: ['subject_name'],
+                        required: false
+                    }
+                ],
+                order: [['exam_date', 'ASC'], ['start_time', 'ASC']]
+            });
+
+            // Transform data to match frontend expectations
+            const transformed_exams = await Promise.all(proctor_exams.map(async (exam) => {
+                const exam_data = exam.get({ plain: true });
+                
+                // Get registration count
+                const registration_count = await Registration.count({
+                    where: { 
+                        exam_id: exam.exam_id,
+                        registration_status: ['pending', 'approved']
+                    }
+                });
+
+        // Get all proctors for this exam (to show other proctors)
+        const all_proctors = await ExamProctor.findAll({
+            where: { exam_id: exam.exam_id },
+            include: [
+                {
+                    model: User,
+                    as: 'proctor',
+                    attributes: ['user_id', 'full_name', 'user_name']
+                }
+            ]
+        });                // Determine exam status based on date
+                const today = new Date().toISOString().split('T')[0];
+                const exam_date = exam_data.exam_date;
+                let calculated_status = 'upcoming';
+                if (exam_date < today) {
+                    calculated_status = 'completed';
+                } else if (exam_date === today) {
+                    calculated_status = 'today';
+                }
+
+                // Get current user's proctor role
+                const current_proctor = exam_data.exam_proctors[0];
+                
+        // Get other proctors (excluding current user)
+        const other_proctors = all_proctors
+            .filter(p => p.proctor_id !== teacher_id)
+            .map(p => p.proctor.full_name);
+
+        // Find subject teacher (assuming the exam creator or main teacher)
+        const subject_teacher = all_proctors.find(p => p.role === 'main')?.proctor?.full_name || 'Chưa xác định';                return {
+                    exam_id: exam_data.exam_id,
+                    title: exam_data.title,
+                    subject_code: exam_data.subject_code,
+                    subject_name: exam_data.subject?.subject_name || 'N/A',
+                    exam_date: exam_data.exam_date,
+                    start_time: exam_data.start_time,
+                    end_time: exam_data.end_time,
+                    duration_minutes: exam_data.duration_minutes,
+                    room_name: exam_data.room?.room_name || 'N/A',
+                    room_capacity: exam_data.room?.capacity || exam_data.max_students,
+                    registered_students: registration_count,
+                    proctor_role: current_proctor.role === 'main' ? 'main_proctor' : 'assistant_proctor',
+                    status: calculated_status,
+                    subject_teacher,
+                    other_proctors,
+                    exam_method: exam_data.method || 'offline',
+                    description: exam_data.description || '',
+                    max_students: exam_data.max_students
+                };
+            }));
+
+            res.json({
+                success: true,
+                count: transformed_exams.length,
+                data: transformed_exams
+            });
+
+        } catch (error) {
+            console.error('Error getting teacher proctor exams:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Lỗi khi lấy danh sách thi giám thị',
+                error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+            });
+        }
     }
 };
 
@@ -597,7 +911,7 @@ async function checkProctorConflicts(proctor_assignments, exam) {
                 },
                 include: [{
                     model: ExamProctor,
-                    as: 'proctors',
+                    as: 'exam_proctors',
                     where: { proctor_id: assignment.proctor_id },
                     required: true
                 }]
@@ -623,6 +937,343 @@ async function checkProctorConflicts(proctor_assignments, exam) {
         console.error('Error checking proctor conflicts:', error);
         return [];
     }
+}
+
+/**
+ * Helper function to check for proctor conflicts
+ * 
+ * @param {number} user_id - User ID to check
+ * @param {string} exam_date - Date of exam
+ * @param {string} start_time - Start time of exam
+ * @param {string} end_time - End time of exam
+ * @param {number} exclude_exam_id - Exam ID to exclude from conflict check
+ * @returns {Array} Array of conflicting exams
+ */
+async function check_proctor_conflicts(user_id, exam_date, start_time, end_time, exclude_exam_id = null) {
+    try {
+        // Find overlapping exams where user is a proctor
+        const where_clause = {
+            exam_date: exam_date,
+            [Op.or]: [
+                {
+                    [Op.and]: [
+                        { start_time: { [Op.lte]: start_time } },
+                        { end_time: { [Op.gt]: start_time } }
+                    ]
+                },
+                {
+                    [Op.and]: [
+                        { start_time: { [Op.lt]: end_time } },
+                        { end_time: { [Op.gte]: end_time } }
+                    ]
+                },
+                {
+                    [Op.and]: [
+                        { start_time: { [Op.gte]: start_time } },
+                        { end_time: { [Op.lte]: end_time } }
+                    ]
+                }
+            ]
+        };
+
+        if (exclude_exam_id) {
+            where_clause.exam_id = { [Op.ne]: exclude_exam_id };
+        }
+
+        const conflicts = await Exam.findAll({
+            where: where_clause,
+            include: [
+                {
+                    model: ExamProctor,
+                    as: 'exam_proctors',
+                    where: { proctor_id: user_id },
+                    required: true
+                }
+            ]
+        });
+
+        return conflicts;
+    } catch (error) {
+        console.error('Error checking proctor conflicts:', error);
+        return [];
+    }
+}
+
+/**
+ * Schedule Conflict Analysis Helper Functions
+ */
+
+/**
+ * Analyze room conflicts - same room at overlapping times
+ */
+async function analyzeRoomConflicts(exams) {
+    const conflicts = [];
+    const room_schedule = {};
+
+    // Group exams by room and date
+    exams.forEach(exam => {
+        if (!exam.room_id) return; // Skip online exams
+
+        const key = `${exam.room_id}_${exam.exam_date}`;
+        if (!room_schedule[key]) {
+            room_schedule[key] = {
+                room_id: exam.room_id,
+                room_name: exam.room?.room_name || 'Unknown Room',
+                date: exam.exam_date,
+                exams: []
+            };
+        }
+        room_schedule[key].exams.push(exam);
+    });
+
+    // Check for time overlaps within each room/date combination
+    Object.values(room_schedule).forEach(schedule => {
+        const sorted_exams = schedule.exams.sort((a, b) => a.start_time.localeCompare(b.start_time));
+        
+        for (let i = 0; i < sorted_exams.length - 1; i++) {
+            const current_exam = sorted_exams[i];
+            const next_exam = sorted_exams[i + 1];
+            
+            // Check if current exam ends after next exam starts
+            if (current_exam.end_time > next_exam.start_time) {
+                conflicts.push({
+                    room_id: schedule.room_id,
+                    room_name: schedule.room_name,
+                    date: schedule.date,
+                    conflicting_exams: [
+                        {
+                            exam_id: current_exam.exam_id,
+                            title: current_exam.title,
+                            start_time: current_exam.start_time,
+                            end_time: current_exam.end_time,
+                            subject: current_exam.subject?.subject_name
+                        },
+                        {
+                            exam_id: next_exam.exam_id,
+                            title: next_exam.title,
+                            start_time: next_exam.start_time,
+                            end_time: next_exam.end_time,
+                            subject: next_exam.subject?.subject_name
+                        }
+                    ]
+                });
+            }
+        }
+    });
+
+    return conflicts;
+}
+
+/**
+ * Analyze proctor conflicts - same proctor assigned to overlapping exams
+ */
+async function analyzeProctorConflicts(exams) {
+    const conflicts = [];
+    const exam_ids = exams.map(e => e.exam_id);
+    
+    if (exam_ids.length === 0) return conflicts;
+
+    // Get all proctor assignments for these exams
+    const proctor_assignments = await ExamProctor.findAll({
+        where: { exam_id: { [Op.in]: exam_ids } },
+        include: [{
+            model: User,
+            as: 'proctor',
+            attributes: ['full_name']
+        }]
+    });
+
+    // Group by proctor and date
+    const proctor_schedule = {};
+    
+    for (const assignment of proctor_assignments) {
+        const exam = exams.find(e => e.exam_id === assignment.exam_id);
+        if (!exam) continue;
+
+        const key = `${assignment.proctor_id}_${exam.exam_date}`;
+        if (!proctor_schedule[key]) {
+            proctor_schedule[key] = {
+                proctor_id: assignment.proctor_id,
+                proctor_name: assignment.proctor?.full_name || 'Unknown Proctor',
+                date: exam.exam_date,
+                assignments: []
+            };
+        }
+        
+        proctor_schedule[key].assignments.push({
+            exam_id: exam.exam_id,
+            title: exam.title,
+            start_time: exam.start_time,
+            end_time: exam.end_time,
+            role: assignment.role,
+            room_name: exam.room?.room_name
+        });
+    }
+
+    // Check for time overlaps within each proctor/date combination
+    Object.values(proctor_schedule).forEach(schedule => {
+        const sorted_assignments = schedule.assignments.sort((a, b) => a.start_time.localeCompare(b.start_time));
+        
+        for (let i = 0; i < sorted_assignments.length - 1; i++) {
+            const current = sorted_assignments[i];
+            const next = sorted_assignments[i + 1];
+            
+            // Check if assignments overlap
+            if (current.end_time > next.start_time) {
+                conflicts.push({
+                    proctor_id: schedule.proctor_id,
+                    proctor_name: schedule.proctor_name,
+                    date: schedule.date,
+                    conflicting_exams: [current, next]
+                });
+            }
+        }
+    });
+
+    return conflicts;
+}
+
+/**
+ * Analyze capacity issues - overcapacity or insufficient proctoring
+ */
+async function analyzeCapacityIssues(exams) {
+    const warnings = [];
+
+    for (const exam of exams) {
+        // Check registration vs capacity
+        const registration_count = await Registration.count({
+            where: { 
+                exam_id: exam.exam_id,
+                registration_status: ['pending', 'approved']
+            }
+        });
+
+        // Room overcapacity
+        if (exam.room && registration_count > exam.room.capacity) {
+            warnings.push({
+                type: 'overcapacity',
+                exam_id: exam.exam_id,
+                exam_title: exam.title,
+                room_name: exam.room.room_name,
+                registered: registration_count,
+                capacity: exam.room.capacity,
+                overflow: registration_count - exam.room.capacity,
+                message: `${exam.title}: ${registration_count} học sinh đăng ký nhưng phòng chỉ chứa ${exam.room.capacity}`
+            });
+        }
+
+        // Insufficient proctors (should have at least 1 proctor per 30 students)
+        const proctor_count = await ExamProctor.count({
+            where: { exam_id: exam.exam_id }
+        });
+
+        const recommended_proctors = Math.ceil(registration_count / 30);
+        if (proctor_count < recommended_proctors && registration_count > 0) {
+            warnings.push({
+                type: 'insufficient_proctors',
+                exam_id: exam.exam_id,
+                exam_title: exam.title,
+                current_proctors: proctor_count,
+                recommended_proctors: recommended_proctors,
+                students: registration_count,
+                message: `${exam.title}: Cần ${recommended_proctors} giám thị cho ${registration_count} học sinh (hiện có ${proctor_count})`
+            });
+        }
+    }
+
+    return warnings;
+}
+
+/**
+ * Analyze time optimization opportunities
+ */
+async function analyzeTimeOptimization(exams) {
+    const suggestions = [];
+    
+    // Group exams by date
+    const daily_schedule = {};
+    exams.forEach(exam => {
+        if (!daily_schedule[exam.exam_date]) {
+            daily_schedule[exam.exam_date] = [];
+        }
+        daily_schedule[exam.exam_date].push(exam);
+    });
+
+    Object.entries(daily_schedule).forEach(([date, day_exams]) => {
+        // Check for large gaps between exams
+        const sorted_exams = day_exams.sort((a, b) => a.start_time.localeCompare(b.start_time));
+        
+        for (let i = 0; i < sorted_exams.length - 1; i++) {
+            const current = sorted_exams[i];
+            const next = sorted_exams[i + 1];
+            
+            // Calculate gap in minutes
+            const current_end = new Date(`2000-01-01 ${current.end_time}`);
+            const next_start = new Date(`2000-01-01 ${next.start_time}`);
+            const gap_minutes = (next_start - current_end) / (1000 * 60);
+            
+            // Suggest consolidation if gap is too large (>2 hours)
+            if (gap_minutes > 120) {
+                suggestions.push({
+                    type: 'large_gap',
+                    date,
+                    gap_hours: Math.round(gap_minutes / 60 * 10) / 10,
+                    exams: [
+                        { title: current.title, end_time: current.end_time },
+                        { title: next.title, start_time: next.start_time }
+                    ],
+                    message: `Khoảng trống ${Math.round(gap_minutes / 60 * 10) / 10}h giữa "${current.title}" và "${next.title}" vào ${date}`
+                });
+            }
+        }
+    });
+
+    return suggestions;
+}
+
+/**
+ * Analyze resource efficiency opportunities
+ */
+async function analyzeResourceEfficiency(exams) {
+    const suggestions = [];
+    
+    // Check for underutilized rooms
+    const room_utilization = {};
+    
+    exams.forEach(exam => {
+        if (!exam.room_id) return;
+        
+        if (!room_utilization[exam.room_id]) {
+            room_utilization[exam.room_id] = {
+                room_name: exam.room?.room_name,
+                capacity: exam.room?.capacity,
+                total_registrations: 0,
+                exam_count: 0
+            };
+        }
+        
+        // We'd need to fetch registration counts, but for efficiency, we'll estimate
+        room_utilization[exam.room_id].exam_count++;
+        room_utilization[exam.room_id].total_registrations += exam.max_students || 0;
+    });
+
+    Object.values(room_utilization).forEach(room => {
+        if (room.capacity && room.total_registrations > 0) {
+            const utilization_rate = room.total_registrations / (room.capacity * room.exam_count);
+            
+            if (utilization_rate < 0.5) { // Less than 50% utilization
+                suggestions.push({
+                    type: 'low_utilization',
+                    room_name: room.room_name,
+                    capacity: room.capacity,
+                    utilization_rate: Math.round(utilization_rate * 100),
+                    message: `Phòng ${room.room_name} chỉ sử dụng ${Math.round(utilization_rate * 100)}% công suất`
+                });
+            }
+        }
+    });
+
+    return suggestions;
 }
 
 module.exports = schedule_controller;

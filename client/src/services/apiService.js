@@ -734,6 +734,41 @@ export const deleteNotification = (notification_id) =>
 	});
 
 // ============================================================================
+// TEACHER-SPECIFIC ENDPOINTS
+// ============================================================================
+
+/**
+ * Get exams where the current teacher is assigned as a proctor
+ *
+ * Retrieves all exams where the authenticated teacher is assigned
+ * as either main proctor or assistant proctor.
+ *
+ * @param {Object} [filters={}] - Optional filters
+ * @param {string} [filters.status] - Filter by exam status
+ * @param {string} [filters.start_date] - Filter exams from date (YYYY-MM-DD)
+ * @param {string} [filters.end_date] - Filter exams to date (YYYY-MM-DD)
+ * @returns {Promise<Object>} Teacher's proctor exams response
+ * @returns {boolean} returns.success - Whether the request was successful
+ * @returns {Array} returns.data - Array of exam objects with proctor details
+ * 
+ * @example
+ * // Get all proctor exams for current teacher
+ * const proctor_exams = await getTeacherProctorExams();
+ * 
+ * @example
+ * // Get only upcoming proctor exams
+ * const upcoming_exams = await getTeacherProctorExams({
+ *     status: 'upcoming',
+ *     start_date: '2025-08-01'
+ * });
+ */
+export const getTeacherProctorExams = (filters = {}) => {
+	const query_params = new URLSearchParams(filters).toString();
+	const endpoint = `/api/schedule/teacher-proctor-exams${query_params ? `?${query_params}` : ""}`;
+	return apiCall(endpoint);
+};
+
+// ============================================================================
 // ROOM MANAGEMENT (Admin Role Required)
 // ============================================================================
 
@@ -972,6 +1007,27 @@ export const getUnassignedData = () =>
 	apiCall("/api/schedule/unassigned", {
 		method: "GET",
 	});
+
+/**
+ * Analyze schedule conflicts and optimization opportunities
+ * 
+ * @param {Object} filters - Analysis filters
+ * @param {string} [filters.start_date] - Start date (YYYY-MM-DD format)
+ * @param {string} [filters.end_date] - End date (YYYY-MM-DD format)
+ * @param {string} [filters.severity='all'] - Severity filter ('critical', 'warning', 'info', 'all')
+ * @returns {Promise<Object>} Response with conflict analysis
+ */
+export const getScheduleConflicts = (filters = {}) => {
+	const params = new URLSearchParams();
+	Object.entries(filters).forEach(([key, value]) => {
+		if (value !== undefined && value !== '' && value !== null) {
+			params.append(key, value);
+		}
+	});
+	
+	const endpoint = `/api/schedule/conflicts${params.toString() ? `?${params.toString()}` : ''}`;
+	return apiCall(endpoint, { method: "GET" });
+};
 
 /**
  * Assign multiple students to an exam
