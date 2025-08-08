@@ -90,7 +90,7 @@ const getUserNotifications = async (req, res) => {
  * @param {object} res - Express response object
  */
 const markNotificationsAsRead = async (req, res) => {
-    const transaction = await models.sequelize.transaction();
+    const transaction = await utility.sequelize.transaction();
     
     try {
         const { notification_ids } = req.body; // Array of notification IDs
@@ -277,8 +277,17 @@ const create_subject_notification = async (action, subject_data, admin_user_id) 
 
         console.log(`📚 Created subject ${action} notification for admin ${admin_user_id}`);
         
-        // TODO: Emit WebSocket event
-        // io.to(`user_${admin_user_id}`).emit('new_notification', notification);
+        // Emit WebSocket event to notify user in real-time
+        const websocket_io = require('../websocket').getIO();
+        if (websocket_io) {
+            websocket_io.to(`user_${admin_user_id}`).emit('new_notification', {
+                notification: notification,
+                action: action,
+                subject_data: subject_data,
+                timestamp: new Date().toISOString()
+            });
+            console.log(`🔔 Emitted new_notification WebSocket event to user_${admin_user_id}`);
+        }
         
         return notification;
     } catch (error) {

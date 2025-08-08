@@ -1,0 +1,24 @@
+http://localhost:5000/api/statistics/system?period=current_semester
+{
+    "success": false,
+    "message": "Lỗi khi tải thống kê hệ thống",
+    "error": "Exam is associated to Room using an alias. You must use the 'as' keyword to specify the alias within your include statement."
+}
+http://localhost:5000/api/statistics/enrollment?period=current_semester
+{
+    "success": false,
+    "message": "Lỗi khi tải thống kê đăng ký",
+    "error": "User is associated to Class multiple times. To identify the correct association, you must use the 'as' keyword to specify the alias of the association you want to include."
+}
+http://localhost:5000/api/statistics/exams?period=current_semester
+{
+    "success": false,
+    "message": "Lỗi khi tải thống kê kỳ thi",
+    "error": "Unknown column 'id' in 'SELECT'"
+}
+http://localhost:5000/api/statistics/recent-activity?limit=10
+{
+    "success": false,
+    "message": "Lỗi khi tải hoạt động gần đây",
+    "error": "You have an error in your SQL syntax; check the manual that corresponds to your MariaDB server version for the right syntax to use near '3.3333333333333335' at line 1"
+}

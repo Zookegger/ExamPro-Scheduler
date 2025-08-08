@@ -4,6 +4,14 @@ const { notifyAdmins } = require('../services/notificationService');
 
 const RESOURCE_TYPE = 'room';
 
+// Error messages for consistent responses
+const ERROR_MESSAGES = {
+    PERMISSION_DENIED: 'Bạn không có quyền truy cập tài nguyên này',
+    ROOM_NOT_FOUND: 'Không tìm thấy phòng',
+    ROOM_IN_USE: 'Không thể xóa phòng đang được sử dụng',
+    INVALID_DATA: 'Dữ liệu không hợp lệ'
+};
+
 // WebSocket instance for real-time updates
 let websocket_io = null;
 
@@ -41,7 +49,7 @@ function emit_room_table_update(action, room, admin_info = null) {
         console.log(`📡 Emitting room_table_update - action: ${action}, room: ${room.room_name}`);
         websocket_io.to('room_management').emit('room_table_update', {
             action: action,
-            room: room,
+            room: room.data,
             admin_info: admin_info,
             timestamp: new Date().toISOString()
         });
@@ -396,12 +404,23 @@ async function createRoom(req, res, next) {
             has_computers,
             features,
             is_active
-        });
+        }, { transaction });
+        
+        await transaction.commit();
+        
+        await notifyAdminsAboutRoom('created', new_room, req.user);
         
         console.log('✅ Room created successfully:', new_room.room_id);
         
-        // Emit real-time update to connected clients
-        emit_room_table_update('create', new_room, req.user);
+        // Emit real-time update to connected clients via WebSocket handlers
+        if (websocket_io) {
+            websocket_io.to('room_management').emit('room_table_update', {
+                action: 'create',
+                room: new_room,
+                admin_info: req.user,
+                timestamp: new Date().toISOString()
+            });
+        }
         
         res.status(201).json({
             success: true,
@@ -410,6 +429,7 @@ async function createRoom(req, res, next) {
         });
         
     } catch (error) {
+        await transaction.rollback();
         console.error('❌ Error creating room:', error);
         
         // Handle Sequelize validation errors
@@ -532,8 +552,17 @@ async function updateRoom(req, res, next) {
         
         console.log('✅ Room updated successfully:', room_id);
         
-        // Emit real-time update to connected clients
-        emit_room_table_update('update', updated_room, req.user);
+        await notifyAdminsAboutRoom('updated', updated_room, req.user);
+        
+        // Emit real-time update to connected clients via WebSocket handlers
+        if (websocket_io) {
+            websocket_io.to('room_management').emit('room_table_update', {
+                action: 'update',
+                room: updated_room,
+                admin_info: req.user,
+                timestamp: new Date().toISOString()
+            });
+        }
         
         // Check and emit exam status change if needed
         const exam_status = await getRoomExamStatus(room_id);
@@ -593,7 +622,7 @@ async function deleteRoom(req, res, next) {
     const transaction = await db.utility.sequelize.transaction();
 
     try {
-        if (req.user.user_role !== ADMIN_ROLE) {
+        if (req.user.user_role !== 'admin') {
             await transaction.rollback();
             return res.status(403).json({
                 success: false,
@@ -656,21 +685,28 @@ async function deleteRoom(req, res, next) {
 
         // Delete the room
         await room.destroy({ transaction });
-        await notifyAdminsAboutRoom('deleted', room_name, req.user)
-        
         await transaction.commit();
-
+        
+        await notifyAdminsAboutRoom('deleted', deleted_room_data.room_name, req.user);
+        
         console.log('✅ Room deleted successfully:', room_name, ' - ', room_id);
         
-        // Emit real-time update to connected clients
-        emit_room_table_update('delete', deleted_room_data, req.user);
+        // Emit real-time update to connected clients via WebSocket handlers
+        if (websocket_io) {
+            websocket_io.to('room_management').emit('room_table_update', {
+                action: 'delete',
+                room: deleted_room_data,
+                admin_info: req.user,
+                timestamp: new Date().toISOString()
+            });
+        }
         
         res.json({
             success: true,
             message: 'Phòng đã được xóa thành công',
             data: {
-                deleted_room_id: subjectId,
-                deleted_room_name: subjectToDelete.subject_name
+                deleted_room_id: room_id,
+                deleted_room_name: room_name
             }
         });
         

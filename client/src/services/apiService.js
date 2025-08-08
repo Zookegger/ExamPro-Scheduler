@@ -1029,6 +1029,112 @@ export const getScheduleConflicts = (filters = {}) => {
 	return apiCall(endpoint, { method: "GET" });
 };
 
+// ============================================================================
+// STATISTICS API FUNCTIONS
+// ============================================================================
+
+/**
+ * Get comprehensive system statistics for admin dashboard
+ * 
+ * @param {Object} filters - Optional filters for statistics
+ * @param {string} [filters.period] - Time period ('current_semester', 'current_year', 'last_semester', 'all_time')
+ * @param {string} [filters.start_date] - Start date filter (YYYY-MM-DD)
+ * @param {string} [filters.end_date] - End date filter (YYYY-MM-DD)
+ * @returns {Promise<Object>} Response with system statistics
+ */
+export const getSystemStatistics = (filters = {}) => {
+	const params = new URLSearchParams();
+	Object.entries(filters).forEach(([key, value]) => {
+		if (value !== undefined && value !== '' && value !== null) {
+			params.append(key, value);
+		}
+	});
+	
+	const endpoint = `/api/statistics/system${params.toString() ? `?${params.toString()}` : ''}`;
+	return apiCall(endpoint, { method: "GET" });
+};
+
+/**
+ * Get enrollment statistics for admin dashboard
+ * 
+ * @param {Object} filters - Optional filters for enrollment statistics
+ * @param {string} [filters.period] - Time period filter
+ * @param {string} [filters.grade_level] - Filter by grade level
+ * @returns {Promise<Object>} Response with enrollment statistics
+ */
+export const getEnrollmentStatistics = (filters = {}) => {
+	const params = new URLSearchParams();
+	Object.entries(filters).forEach(([key, value]) => {
+		if (value !== undefined && value !== '' && value !== null) {
+			params.append(key, value);
+		}
+	});
+	
+	const endpoint = `/api/statistics/enrollment${params.toString() ? `?${params.toString()}` : ''}`;
+	return apiCall(endpoint, { method: "GET" });
+};
+
+/**
+ * Get exam statistics including performance and utilization data
+ * 
+ * @param {Object} filters - Optional filters for exam statistics
+ * @param {string} [filters.period] - Time period filter
+ * @param {string} [filters.subject_code] - Filter by subject
+ * @param {string} [filters.status] - Filter by exam status
+ * @returns {Promise<Object>} Response with exam statistics
+ */
+export const getExamStatistics = (filters = {}) => {
+	const params = new URLSearchParams();
+	Object.entries(filters).forEach(([key, value]) => {
+		if (value !== undefined && value !== '' && value !== null) {
+			params.append(key, value);
+		}
+	});
+	
+	const endpoint = `/api/statistics/exams${params.toString() ? `?${params.toString()}` : ''}`;
+	return apiCall(endpoint, { method: "GET" });
+};
+
+/**
+ * Get room utilization statistics
+ * 
+ * @param {Object} filters - Optional filters for room statistics
+ * @param {string} [filters.period] - Time period filter
+ * @param {number} [filters.room_id] - Filter by specific room
+ * @returns {Promise<Object>} Response with room utilization data
+ */
+export const getRoomStatistics = (filters = {}) => {
+	const params = new URLSearchParams();
+	Object.entries(filters).forEach(([key, value]) => {
+		if (value !== undefined && value !== '' && value !== null) {
+			params.append(key, value);
+		}
+	});
+	
+	const endpoint = `/api/statistics/rooms${params.toString() ? `?${params.toString()}` : ''}`;
+	return apiCall(endpoint, { method: "GET" });
+};
+
+/**
+ * Get recent activity feed for admin dashboard
+ * 
+ * @param {Object} filters - Optional filters for activity feed
+ * @param {number} [filters.limit=10] - Number of activities to return
+ * @param {string} [filters.type] - Filter by activity type
+ * @returns {Promise<Object>} Response with recent activities
+ */
+export const getRecentActivity = (filters = {}) => {
+	const params = new URLSearchParams();
+	Object.entries(filters).forEach(([key, value]) => {
+		if (value !== undefined && value !== '' && value !== null) {
+			params.append(key, value);
+		}
+	});
+	
+	const endpoint = `/api/statistics/recent-activity${params.toString() ? `?${params.toString()}` : ''}`;
+	return apiCall(endpoint, { method: "GET" });
+};
+
 /**
  * Assign multiple students to an exam
  * 

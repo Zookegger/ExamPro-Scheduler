@@ -4,6 +4,19 @@ const { notifyAdmins } = require('../services/notificationService');
 // Constants for better maintainability
 const RESOURCE_TYPE = 'subject';
 const ADMIN_ROLE = 'admin';
+
+// WebSocket instance for real-time updates
+let websocket_io = null;
+
+/**
+ * Set WebSocket instance for real-time subject updates
+ * @param {Object} io - Socket.io instance
+ */
+function set_websocket_io(io) {
+    websocket_io = io;
+    console.log('🔌 WebSocket connected to subject controller');
+}
+
 const ERROR_MESSAGES = {
     PERMISSION_DENIED: 'Bạn không có quyền truy cập tài nguyên này',
     SUBJECT_NOT_FOUND: 'Không tìm thấy môn học',
@@ -27,6 +40,41 @@ async function notifyAdminsAboutSubject(action, resource_data, current_user) {
         await notifyAdmins(RESOURCE_TYPE, action, resource_data, current_user);
     } catch (error) {
         console.error(`❌ Error notifying admins about subject ${action}:`, error);
+    }
+}
+
+/**
+ * Emit subject table update to connected clients
+ * @param {string} action - Action performed (create, update, delete)
+ * @param {Object} subject - Room data
+ * @param {Object} admin_info - Admin who performed the action
+ */
+function emit_subject_table_update(action, subject, admin_info = null) {
+    if (websocket_io) {
+        console.log(`📡 Emitting subject_table_update - action: ${action}, subject: ${subject.subject_name}`);
+        websocket_io.to('subject_management').emit('subject_table_update', {
+            action: action,
+            subject: subject,
+            admin_info: admin_info,
+            timestamp: new Date().toISOString()
+        });
+    }
+}
+
+/**
+ * Emit room exam status change to connected clients
+ * @param {number} room_id - Room ID
+ * @param {Object} status_info - Status information
+ */
+function emit_room_exam_status_change(room_id, status_info) {
+    if (websocket_io) {
+        console.log(`📊 Emitting room exam status change for room ${room_id}: ${status_info.status}`);
+        websocket_io.to('room_management').emit('room_exam_status_change', {
+            room_id: room_id,
+            status: status_info.status,
+            exam_info: status_info.current_exam || status_info.upcoming_exam,
+            timestamp: new Date().toISOString()
+        });
     }
 }
 
@@ -256,11 +304,12 @@ async function deleteSubject(req, res, next) {
 
         await subjectToDelete.destroy({ transaction });
         await notifyAdminsAboutSubject('deleted', subjectToDelete, req.user);
-
         await transaction.commit();
+
         console.log(`✅ Subject "${subjectToDelete.subject_name}" deleted successfully with transaction`);
 
-        emit_subject_table_update()
+        // Emit real-time update to connected clients
+        emit_subject_table_update('delete', subjectToDelete, req.user);
 
         return res.status(200).json({
             success: true,

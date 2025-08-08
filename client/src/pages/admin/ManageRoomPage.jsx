@@ -199,8 +199,15 @@ function ManageRoomPage({ current_user, current_user_role }) {
     };
 
     const get_unique_buildings = () => {
-        const buildings = [...new Set(rooms.map(room => room.building).filter(building => building))];
-        return buildings.sort();
+        console.log('🔍 Debug rooms_data:', rooms);
+        console.log('🔍 First room structure:', rooms[0]);
+    
+        const buildings = rooms.map((room, index) => {
+            console.log(`🔍 Room ${index}:`, room);
+            return room?.building || 'Unknown';
+        });
+        
+        return [...new Set(buildings)];
     };
 
     const handle_modal_open = (mode, room = null) => {

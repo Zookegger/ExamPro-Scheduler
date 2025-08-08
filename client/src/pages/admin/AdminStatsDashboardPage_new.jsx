@@ -165,10 +165,12 @@ function AdminStatsDashboardPage({ current_user_role }) {
 
     // Auto-refresh every 5 minutes
     useEffect(() => {
-        
-        console.log('🔄 Auto-refreshing dashboard data...');
-        load_dashboard_data();
-        
+        const interval = setInterval(() => {
+            console.log('🔄 Auto-refreshing dashboard data...');
+            load_dashboard_data();
+        }, 5 * 60 * 1000); // 5 minutes
+
+        return () => clearInterval(interval);
     }, [load_dashboard_data]);
 
     // Role-based access control

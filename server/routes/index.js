@@ -35,6 +35,7 @@ const enrollment_routes = require('./enrollment_routes');
 const class_routes = require('./class_routes');
 const notification_routes = require('./notification_routes');
 const schedule_routes = require('./schedule_routes');
+const statistics_routes = require('./statistics_routes');
 
 /**
  * Mount Route Modules
@@ -82,6 +83,9 @@ router.use('/notifications', notification_routes);
 
 // Schedule management routes
 router.use('/schedule', schedule_routes);
+
+// Statistics management routes
+router.use('/statistics', statistics_routes);
 
 // Admin routes (development only)
 router.use('/admin', admin_routes);

@@ -44,8 +44,11 @@ class SubjectHandler {
                 transaction
             });
 
-            const notification_recipients = admin_users.filter(user => user.user_id !== admin_info?.user_id);
-
+            const current_admin_id = admin_info?.user_id || socket.user?.user_id;
+            const notification_recipients = admin_users.filter(user => 
+                user.user_id !== current_admin_id
+            );
+            
             if (notification_recipients.length > 0) {
                 // Create notification messages based on action
                 const action_messages = {

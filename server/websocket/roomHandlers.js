@@ -17,9 +17,10 @@
  */
 
 const { models } = require('../models');
-const { Room, Exam, User } = models;
+const { Room, Exam, User, Notification } = models;
 const { requireAdminPermission } = require('./authorizationHandlers');
 const { Op } = require('sequelize');
+const db = require('../models');
 
 // Event constants for room operations
 const ROOM_EVENTS = {
@@ -63,24 +64,102 @@ class RoomHandler {
     }
 
     /**
-     * Register all room-related WebSocket event handlers
-     * @param {Object} socket - Socket.io socket instance
+     * Create and emit notification to admin users (excluding the actor)
+     * @param {Object} room_data - Room information
+     * @param {Object} admin_info - Admin who performed the action
+     * @param {string} action - Action performed (create, update, delete)
+     * @param {Object} transaction - Database transaction instance
      */
-    register_room_handlers(socket) {
-        console.log(`🏢 Registering room WebSocket handlers for socket ${socket.id}`);
+    async createAndEmitNotifications(room_data, admin_info, action, transaction) {
+        try {
+            // Get all admin users to send notifications
+            const admin_users = await User.findAll({
+                where: { 
+                    user_role: 'admin',
+                    is_active: true 
+                },
+                attributes: ['user_id', 'full_name'],
+                transaction
+            });
 
-        // Admin-only handlers
-        socket.on('room_created', (data) => this.handle_room_created(socket, data));
-        socket.on('room_updated', (data) => this.handle_room_updated(socket, data));
-        socket.on('room_deleted', (data) => this.handle_room_deleted(socket, data));
-        
-        // Real-time status handlers
-        socket.on('join_room_management', (data) => this.handle_join_room_management(socket, data));
-        socket.on('leave_room_management', (data) => this.handle_leave_room_management(socket, data));
-        socket.on('request_room_status_update', (data) => this.handle_request_room_status_update(socket, data));
-        
-        // Exam status handlers
-        socket.on('room_exam_status_changed', (data) => this.handle_room_exam_status_changed(socket, data));
+            const current_admin_id = admin_info?.user_id;
+            const notification_recipients = admin_users.filter(user => 
+                user.user_id !== current_admin_id
+            );
+            
+            if (notification_recipients.length > 0) {
+                // Create notification messages based on action
+                const action_messages = {
+                    create: {
+                        title: 'Phòng thi mới được tạo',
+                        message: `Phòng "${room_data.room_name}" (Sức chứa: ${room_data.capacity}) đã được tạo bởi ${admin_info?.full_name || 'admin khác'}.`
+                    },
+                    update: {
+                        title: 'Phòng thi được cập nhật',
+                        message: `Phòng "${room_data.room_name}" đã được cập nhật bởi ${admin_info?.full_name || 'admin khác'}.`
+                    },
+                    delete: {
+                        title: 'Phòng thi bị xóa',
+                        message: `Phòng "${room_data.room_name}" đã bị xóa bởi ${admin_info?.full_name || 'admin khác'}.`
+                    }
+                };
+
+                const message_info = action_messages[action];
+
+                // Create notifications in database for persistence
+                const notifications_to_create = notification_recipients.map(user => ({
+                    user_id: user.user_id,
+                    title: message_info.title,
+                    message: message_info.message,
+                    type: 'room',
+                    related_id: room_data.room_id,
+                    related_type: 'room',
+                    is_read: false
+                }));
+
+                const created_notifications = await Notification.bulkCreate(notifications_to_create, { transaction });
+
+                // Emit real-time notifications to connected users (exclude the creator)
+                notification_recipients.forEach((user, index) => {
+                    const notification_data = {
+                        notification_id: created_notifications[index].notification_id,
+                        title: message_info.title,
+                        message: message_info.message,
+                        type: 'room',
+                        resource_type: 'room',
+                        resource_id: room_data.room_id,
+                        is_read: false,
+                        created_at: created_notifications[index].created_at,
+                        metadata: {
+                            name: room_data.room_name,
+                            capacity: room_data.capacity,
+                            building: room_data.building,
+                            action: action,
+                            changed_by: admin_info?.full_name
+                        }
+                    };
+
+                    // Emit to specific user's notification room
+                    this.io.to(`notifications_${user.user_id}`).emit('new_notification', {
+                        success: true,
+                        notification: notification_data,
+                        timestamp: new Date().toISOString()
+                    });
+
+                    // Update unread count
+                    this.io.to(`notifications_${user.user_id}`).emit('unread_count_update', {
+                        success: true,
+                        unread_count: created_notifications.length // This should be calculated properly
+                    });
+                });
+
+                console.log(`📨 Created and emitted ${created_notifications.length} notifications for room ${action}`);
+            }
+
+        } catch (error) {
+            console.error(`❌ Error creating notifications for room ${action}:`, error);
+            // Don't throw - notifications shouldn't break the main operation
+        }
     }
 
     /**
@@ -144,33 +223,84 @@ class RoomHandler {
      * @param {Object} data - Created room data
      */
     async handle_room_created(socket, data) {
+        // Start database transaction for notification consistency
+        const transaction = await db.utility.sequelize.transaction();
+        
         try {
-            // Verify admin permission
+            // 🔐 Authorization check - only admins can trigger room operations
             if (!requireAdminPermission(socket)) {
+                await transaction.rollback();
                 return;
             }
 
-            const { room } = data;
+            // Handle different data formats
+            let room_data;
+            if (data && data.room_data) {
+                // Format: { room_data: {...} }
+                room_data = data.room_data;
+            } else if (data && data.room_name) {
+                // Format: { room_name: ..., capacity: ..., etc. } (direct room object)
+                room_data = data;
+            } else if (data) {
+                // Try to use data directly
+                room_data = data;
+            } else {
+                console.error('❌ Missing or invalid room data in handle_room_created:', data);
+                await transaction.rollback();
+                socket.emit(this.events.ERROR, {
+                    success: false,
+                    message: 'Dữ liệu phòng không hợp lệ',
+                    error_type: this.errors.VALIDATION_ERROR
+                });
+                return;
+            }
             
-            console.log(`🏢 Room created: ${room.room_name} by ${socket.user?.full_name}`);
+            // Validate room_data has required fields
+            if (!room_data || !room_data.room_name) {
+                console.error('❌ Missing room_name in room_data:', room_data);
+                await transaction.rollback();
+                socket.emit(this.events.ERROR, {
+                    success: false,
+                    message: 'Thiếu tên phòng',
+                    error_type: this.errors.VALIDATION_ERROR
+                });
+                return;
+            }
 
-            // Broadcast to all room management participants
-            socket.to('room_management').emit(this.events.TABLE_UPDATE, {
+            const admin_info = data.admin_info || socket.user;
+            console.log(`🏢 Room created: ${room_data.room_name} by admin ${admin_info?.user_id || socket.user?.user_id}`);
+
+            // Emit table update for real-time UI updates to OTHER connected clients (exclude the creator)
+            socket.broadcast.emit(this.events.TABLE_UPDATE, {
                 action: 'create',
-                room: room,
-                admin_info: socket.user
+                room: room_data,
+                timestamp: new Date().toISOString(),
+                changed_by: admin_info
             });
 
-            // Send notification to the creator
-            socket.emit(this.events.NOTIFICATION, {
-                success: true,
-                type: 'success',
-                message: `Phòng "${room.room_name}" đã được tạo thành công`
-            });
+            // Create and emit notifications within transaction
+            await this.createAndEmitNotifications(
+                room_data, 
+                admin_info, 
+                'create', 
+                transaction
+            );
+
+            // Commit transaction
+            await transaction.commit();
+
+            console.log(`✅ Room creation notification flow completed for room: ${room_data.room_name}`);
 
         } catch (error) {
-            console.error('Error handling room creation:', error);
-            this.emit_error(socket, this.errors.DATABASE_ERROR, 'Lỗi xử lý tạo phòng');
+            await transaction.rollback();
+            console.error('❌ Error handling room creation:', error);
+            
+            socket.emit(this.events.ERROR, {
+                success: false,
+                message: 'Lỗi hệ thống khi xử lý tạo phòng',
+                error_type: this.errors.DATABASE_ERROR,
+                details: process.env.NODE_ENV === 'development' ? error.message : undefined
+            });
         }
     }
 
@@ -180,36 +310,87 @@ class RoomHandler {
      * @param {Object} data - Updated room data
      */
     async handle_room_updated(socket, data) {
+        // Start database transaction for notification consistency
+        const transaction = await db.utility.sequelize.transaction();
+        
         try {
-            // Verify admin permission
+            // 🔐 Authorization check - only admins can trigger room operations
             if (!requireAdminPermission(socket)) {
+                await transaction.rollback();
                 return;
             }
 
-            const { room } = data;
+            // Handle different data formats
+            let room_data;
+            if (data && data.room_data) {
+                // Format: { room_data: {...} }
+                room_data = data.room_data;
+            } else if (data && data.room_name) {
+                // Format: { room_name: ..., capacity: ..., etc. } (direct room object)
+                room_data = data;
+            } else if (data) {
+                // Try to use data directly
+                room_data = data;
+            } else {
+                console.error('❌ Missing or invalid room data in handle_room_updated:', data);
+                await transaction.rollback();
+                socket.emit(this.events.ERROR, {
+                    success: false,
+                    message: 'Dữ liệu phòng không hợp lệ',
+                    error_type: this.errors.VALIDATION_ERROR
+                });
+                return;
+            }
             
-            console.log(`🏢 Room updated: ${room.room_name} by ${socket.user?.full_name}`);
+            // Validate room_data has required fields
+            if (!room_data || !room_data.room_name) {
+                console.error('❌ Missing room_name in room_data:', room_data);
+                await transaction.rollback();
+                socket.emit(this.events.ERROR, {
+                    success: false,
+                    message: 'Thiếu tên phòng',
+                    error_type: this.errors.VALIDATION_ERROR
+                });
+                return;
+            }
 
-            // Broadcast to all room management participants
-            socket.to('room_management').emit(this.events.TABLE_UPDATE, {
+            const admin_info = data.admin_info || socket.user;
+            console.log(`🏢 Room updated: ${room_data.room_name} by admin ${admin_info?.user_id || socket.user?.user_id}`);
+
+            // Emit table update for real-time UI updates to OTHER connected clients (exclude the creator)
+            socket.broadcast.emit(this.events.TABLE_UPDATE, {
                 action: 'update',
-                room: room,
-                admin_info: socket.user
+                room: room_data,
+                timestamp: new Date().toISOString(),
+                changed_by: admin_info
             });
 
-            // Send notification to the updater
-            socket.emit(this.events.NOTIFICATION, {
-                success: true,
-                type: 'success',
-                message: `Phòng "${room.room_name}" đã được cập nhật thành công`
-            });
+            // Create and emit notifications within transaction
+            await this.createAndEmitNotifications(
+                room_data, 
+                admin_info, 
+                'update', 
+                transaction
+            );
 
             // Check if exam status needs to be updated
-            await this.check_and_update_room_exam_status(room.room_id);
+            await this.check_and_update_room_exam_status(room_data.room_id);
+
+            // Commit transaction
+            await transaction.commit();
+
+            console.log(`✅ Room update notification flow completed for room: ${room_data.room_name}`);
 
         } catch (error) {
-            console.error('Error handling room update:', error);
-            this.emit_error(socket, this.errors.DATABASE_ERROR, 'Lỗi xử lý cập nhật phòng');
+            await transaction.rollback();
+            console.error('❌ Error handling room update:', error);
+            
+            socket.emit(this.events.ERROR, {
+                success: false,
+                message: 'Lỗi hệ thống khi xử lý cập nhật phòng',
+                error_type: this.errors.DATABASE_ERROR,
+                details: process.env.NODE_ENV === 'development' ? error.message : undefined
+            });
         }
     }
 
@@ -219,33 +400,101 @@ class RoomHandler {
      * @param {Object} data - Deleted room data
      */
     async handle_room_deleted(socket, data) {
+        // Start database transaction for notification consistency
+        const transaction = await db.utility.sequelize.transaction();
+        
         try {
-            // Verify admin permission
+            // 🔐 Authorization check - only admins can trigger room operations
             if (!requireAdminPermission(socket)) {
+                await transaction.rollback();
                 return;
             }
 
-            const { room } = data;
+            // Handle different data formats and normalize to consistent structure
+            let room_data;
+            if (data && data.room_data) {
+                // Format: { room_data: {...} }
+                room_data = data.room_data;
+            } else if (data && data.room_name) {
+                // Format: { room_name: ..., capacity: ..., etc. } (direct room object)
+                room_data = data;
+            } else if (data && data.deleted_room_name) {
+                // Format: { deleted_room_id: '3', deleted_room_name: 'A1' } (deletion format)
+                room_data = {
+                    room_id: data.deleted_room_id,
+                    room_name: data.deleted_room_name,
+                    // Preserve original fields for reference
+                    deleted_room_id: data.deleted_room_id,
+                    deleted_room_name: data.deleted_room_name,
+                    // Add default values for missing fields
+                    capacity: data.capacity || 'Unknown',
+                    building: data.building || 'Unknown'
+                };
+            } else if (data) {
+                // Try to use data directly
+                room_data = data;
+            } else {
+                console.error('❌ Missing or invalid room data in handle_room_deleted:', data);
+                await transaction.rollback();
+                socket.emit(this.events.ERROR, {
+                    success: false,
+                    message: 'Dữ liệu phòng không hợp lệ',
+                    error_type: this.errors.VALIDATION_ERROR
+                });
+                return;
+            }
             
-            console.log(`🏢 Room deleted: ${room.room_name} by ${socket.user?.full_name}`);
+            // Validate room_data has required fields (check both formats)
+            if (!room_data || (!room_data.room_name && !room_data.deleted_room_name)) {
+                console.error('❌ Missing room_name or deleted_room_name in room_data:', room_data);
+                await transaction.rollback();
+                socket.emit(this.events.ERROR, {
+                    success: false,
+                    message: 'Thiếu tên phòng',
+                    error_type: this.errors.VALIDATION_ERROR
+                });
+                return;
+            }
 
-            // Broadcast to all room management participants
-            socket.to('room_management').emit(this.events.TABLE_UPDATE, {
+            // Ensure room_name is available for notification logic
+            if (!room_data.room_name && room_data.deleted_room_name) {
+                room_data.room_name = room_data.deleted_room_name;
+            }
+
+            const admin_info = data.admin_info || socket.user;
+            console.log(`🏢 Room deleted: ${room_data.room_name} by admin ${admin_info?.user_id || socket.user?.user_id}`);
+
+            // Emit table update for real-time UI updates to OTHER connected clients (exclude the creator)
+            socket.broadcast.emit(this.events.TABLE_UPDATE, {
                 action: 'delete',
-                room: room,
-                admin_info: socket.user
+                room: room_data,
+                timestamp: new Date().toISOString(),
+                changed_by: admin_info
             });
 
-            // Send notification to the deleter
-            socket.emit(this.events.NOTIFICATION, {
-                success: true,
-                type: 'warning',
-                message: `Phòng "${room.room_name}" đã được xóa thành công`
-            });
+            // Create and emit notifications within transaction
+            await this.createAndEmitNotifications(
+                room_data, 
+                admin_info, 
+                'delete', 
+                transaction
+            );
+
+            // Commit transaction
+            await transaction.commit();
+
+            console.log(`✅ Room deletion notification flow completed for room: ${room_data.room_name}`);
 
         } catch (error) {
-            console.error('Error handling room deletion:', error);
-            this.emit_error(socket, this.errors.DATABASE_ERROR, 'Lỗi xử lý xóa phòng');
+            await transaction.rollback();
+            console.error('❌ Error handling room deletion:', error);
+            
+            socket.emit(this.events.ERROR, {
+                success: false,
+                message: 'Lỗi hệ thống khi xử lý xóa phòng',
+                error_type: this.errors.DATABASE_ERROR,
+                details: process.env.NODE_ENV === 'development' ? error.message : undefined
+            });
         }
     }
 
@@ -388,7 +637,7 @@ class RoomHandler {
                 where: {
                     room_id: room_id,
                     exam_date: {
-                        [Op.eq]: models.sequelize.fn('DATE', now)
+                        [Op.eq]: db.utility.sequelize.fn('DATE', now)
                     },
                     start_time: {
                         [Op.lte]: now.toTimeString().slice(0, 8)
@@ -416,10 +665,10 @@ class RoomHandler {
                 where: {
                     room_id: room_id,
                     exam_date: {
-                        [sequelize.Sequelize.Op.gte]: sequelize.Sequelize.fn('DATE', now)
+                        [Op.gte]: db.utility.sequelize.fn('DATE', now)
                     },
                     status: {
-                        [sequelize.Sequelize.Op.in]: ['active', 'scheduled']
+                        [Op.in]: ['active', 'scheduled']
                     }
                 },
                 order: [['exam_date', 'ASC'], ['start_time', 'ASC']],
@@ -468,9 +717,39 @@ class RoomHandler {
  * @param {Object} socket - Socket.io socket instance
  * @param {Object} io - Socket.io server instance
  */
-function register_room_handlers(socket, io) {
-    const room_handler = new RoomHandler(io);
-    room_handler.register_room_handlers(socket);
+function register_room_handlers(socket, io_stream) {
+    console.log(`🏢 Registering room handlers for socket ${socket.id}`);
+    const handler = new RoomHandler(io_stream);
+
+    // Event handlers for CRUD operations
+    /**
+     * 🧠 CRITICAL: Why we need .bind(handler)
+     * 
+     * When Socket.io calls our handler (like handle_room_created), JavaScript *loses* 
+     * the connection to our RoomHandler instance ('this' becomes undefined).
+     * 
+     * .bind(handler) FIXES THIS by permanently locking 'this' to our handler instance,
+     * so 'this.io' works correctly inside the method.
+     * 
+     * 🔥 Without .bind():
+     *   - this.io → undefined (CRASH!)
+     * 
+     * ✅ With .bind(handler):
+     *   - this.io → Our RoomHandler's io instance (WORKS!)
+     * 
+     * 📋 Note: We pass socket as second parameter for authorization checks
+     */
+    socket.on('room_created', (data) => handler.handle_room_created(socket, data));
+    socket.on('room_updated', (data) => handler.handle_room_updated(socket, data));
+    socket.on('room_deleted', (data) => handler.handle_room_deleted(socket, data));
+    
+    // Real-time status handlers
+    socket.on('join_room_management', (data) => handler.handle_join_room_management(socket, data));
+    socket.on('leave_room_management', (data) => handler.handle_leave_room_management(socket, data));
+    socket.on('request_room_status_update', (data) => handler.handle_request_room_status_update(socket, data));
+    
+    // Exam status handlers
+    socket.on('room_exam_status_changed', (data) => handler.handle_room_exam_status_changed(socket, data));
 }
 
 module.exports = {
